@@ -1,11 +1,11 @@
-start_position: [2, 31]
+start_position: [2, 22]
 
 key_positions: []
 
 door_positions: []
 
 reward_positions:
-    - [53, 7]
+    - [39, 5]
 
 # provide either one set of statistics (used for all rewards)
 # or one set of statistics for each reward

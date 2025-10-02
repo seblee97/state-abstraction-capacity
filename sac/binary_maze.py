@@ -115,7 +115,7 @@ def generate_binary_tree_maze(tree_depth=5):
     maze_str = '\n'.join(''.join(row) for row in maze)
     return maze_str, start_pos, reward_pos
 
-def generate_fractal_maze(depth=4, maze_size=63):
+def generate_fractal_maze(depth=6, maze_size=45):
     """
     Generate a fractal maze with binary tree structure.
     
@@ -144,7 +144,7 @@ def generate_fractal_maze(depth=4, maze_size=63):
     maze = [['#' for _ in range(maze_size)] for _ in range(maze_size)]
     
     # Corridor width
-    corridor_width = 3
+    corridor_width = 1
     half_width = corridor_width // 2
     
     def carve_horizontal(y, x1, x2):
@@ -180,7 +180,7 @@ def generate_fractal_maze(depth=4, maze_size=63):
         is_horizontal : bool
             True if current corridor is horizontal, False if vertical
         """
-        if level < 0 or (width < 10 and height < 10):
+        if level < 0 or (width < 5 and height < 5):
             return
         
         if direction == 'right':
