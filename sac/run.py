@@ -27,7 +27,7 @@ parser.add_argument(
     "-lr",
     "--learning_rate",
     type=float,
-    default=0.01,
+    default=0.001,
     help="Learning rate for the model.",
 )
 parser.add_argument(
@@ -60,6 +60,33 @@ parser.add_argument(
 )
 parser.add_argument(
     "-bs", "--batch_size", type=int, default=64, help="Batch size for training."
+)
+parser.add_argument(
+    "-tuf",
+    "--target_update_frequency",
+    type=int,
+    default=50,
+    help="Frequency of updating the target network (for DQN).",
+)
+parser.add_argument(
+    "-rbs",
+    "--replay_buffer_size",
+    type=int,
+    default=10000,
+    help="Size of the replay buffer (for DQN).",
+)
+parser.add_argument(
+    "-burnin",
+    "--burnin",
+    type=int,
+    default=1000,
+    help="Number of steps to populate the replay buffer before training (for DQN).",
+)
+parser.add_argument(
+    "-conv",
+    "--convolutional",
+    action="store_true",
+    help="Use convolutional neural network (for DQN).",
 )
 parser.add_argument(
     "-test",
@@ -97,6 +124,14 @@ parser.add_argument(
     help="Nme of map YAML file in maps folder.",
 )
 parser.add_argument(
+    "-rep",
+    "--representation",
+    type=str,
+    default="agent_position",
+    choices=["agent_position", "pixel"],
+    help="State representation to use.",
+)
+parser.add_argument(
     "-timeout",
     "--episode_timeout",
     type=int,
@@ -122,11 +157,13 @@ def create_experiment_directory(base_dir: str) -> str:
     return experiment_dir
 
 
-def setup_environment(map_path: str, map_yaml_path: str, episode_timeout: int):
+def setup_environment(
+    map_path: str, map_yaml_path: str, episode_timeout: int, representation: str
+):
     env = key_door_env.KeyDoorEnv(
         map_ascii_path=map_path,
         map_yaml_path=map_yaml_path,
-        representation="agent_position",
+        representation=representation,
         episode_timeout=episode_timeout,
     )
     env = visualisation_env.VisualisationEnv(env)
@@ -134,11 +171,15 @@ def setup_environment(map_path: str, map_yaml_path: str, episode_timeout: int):
     return env
 
 
-def setup_model(model_type: str, state_space, action_space):
+def setup_model(
+    model_type: str,
+    state_space,
+    action_space,
+):
     if model_type == "q_learning":
         return q_learning.QLearning(
-            state_space=env.state_space,
-            action_space=env.action_space,
+            state_space=state_space,
+            action_space=action_space,
             learning_rate=args.learning_rate,
             discount_factor=args.discount_factor,
             exploration_rate=args.exploration_rate,
@@ -147,7 +188,21 @@ def setup_model(model_type: str, state_space, action_space):
     elif model_type == "ppo":
         return ppo.PPO()
     elif model_type == "dqn":
-        return dqn.DQN()
+        sample_state = env.reset_environment()
+        num_actions = len(action_space)
+        return dqn.DQN(
+            sample_state=sample_state,
+            num_actions=num_actions,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            exploration_rate=args.exploration_rate,
+            exploration_decay=args.exploration_decay,
+            batch_size=args.batch_size,
+            target_update_frequency=args.target_update_frequency,
+            replay_buffer_size=args.replay_buffer_size,
+            burnin=args.burnin,
+            convolutional=args.convolutional,
+        )
 
     else:
         raise ValueError(f"Unknown model type: {model_type}")
@@ -165,6 +220,7 @@ def train(
 
     episode_lengths = []
     episode_rewards = []
+    episode_losses = []
 
     test_episode_lengths = []
     test_episode_rewards = []
@@ -173,6 +229,7 @@ def train(
 
         episode_length = 0
         episode_reward = 0
+        episode_loss = 0
 
         state = env.reset_environment()
 
@@ -180,7 +237,7 @@ def train(
             action = model.select_action(state)
             reward, next_state = env.step(action)
 
-            model.step(
+            info = model.step(
                 state=state,
                 action=action,
                 reward=reward,
@@ -192,9 +249,11 @@ def train(
 
             episode_length += 1
             episode_reward += reward
+            episode_loss += info.get("loss", np.nan)
 
             if not env.active:
                 break
+
         if i % test_frequency == 0:
             test_reward, test_episode_length = test(model, env, episode_timeout)
             test_episode_rewards.append(test_reward)
@@ -204,9 +263,12 @@ def train(
                 save_path=os.path.join(save_dir, "rollouts", f"episode_{i}.mp4"),
                 history="test",
             )
+        if i % args.save_model_frequency == 0:
+            model.save_model(save_dir, i)
 
         episode_lengths.append(episode_length)
         episode_rewards.append(episode_reward)
+        episode_losses.append(episode_loss / episode_length)
 
     np.savez(
         os.path.join(save_dir, "training_stats.npz"),
@@ -214,6 +276,7 @@ def train(
         episode_rewards=episode_rewards,
         test_episode_lengths=test_episode_lengths,
         test_episode_rewards=test_episode_rewards,
+        episode_losses=episode_losses,
     )
 
 
@@ -249,6 +312,7 @@ if __name__ == "__main__":
         map_path=map_path,
         map_yaml_path=map_yaml_path,
         episode_timeout=args.episode_timeout,
+        representation=args.representation,
     )
     model = setup_model(
         model_type=args.model,
