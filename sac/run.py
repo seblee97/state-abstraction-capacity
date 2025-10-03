@@ -1,0 +1,266 @@
+from sac.models import q_learning, ppo, dqn
+from key_door import key_door_env, visualisation_env
+import argparse
+import numpy as np
+import os
+from datetime import datetime
+
+
+# Get the directory of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+
+parser = argparse.ArgumentParser()
+
+parser = argparse.ArgumentParser(
+    description="Train RL models on the Key-Door environment."
+)
+parser.add_argument(
+    "-m",
+    "--model",
+    type=str,
+    default="q_learning",
+    choices=["q_learning", "ppo", "dqn"],
+    help="Model to use for training.",
+)
+parser.add_argument(
+    "-lr",
+    "--learning_rate",
+    type=float,
+    default=0.01,
+    help="Learning rate for the model.",
+)
+parser.add_argument(
+    "-gamma",
+    "--discount_factor",
+    type=float,
+    default=0.99,
+    help="Discount factor for future rewards.",
+)
+parser.add_argument(
+    "-eps",
+    "--exploration_rate",
+    type=float,
+    default=1.0,
+    help="Initial exploration rate for epsilon-greedy policy.",
+)
+parser.add_argument(
+    "-eps_decay",
+    "--exploration_decay",
+    type=float,
+    default=0.995,
+    help="Decay rate for exploration.",
+)
+parser.add_argument(
+    "-num_ep",
+    "--num_episodes",
+    type=int,
+    default=1000,
+    help="Number of training episodes.",
+)
+parser.add_argument(
+    "-bs", "--batch_size", type=int, default=64, help="Batch size for training."
+)
+parser.add_argument(
+    "-test",
+    "--test_frequency",
+    type=int,
+    default=50,
+    help="Frequency of testing the model during training.",
+)
+parser.add_argument(
+    "-save",
+    "--save_model_frequency",
+    type=int,
+    default=50,
+    help="Frequency of saving the model (weights or table) during training.",
+)
+parser.add_argument(
+    "-viz",
+    "--visualisation_frequency",
+    type=int,
+    default=50,
+    help="Frequency of visualising (episode rollouts, value functions etc.) during training.",
+)
+parser.add_argument(
+    "-map",
+    "--map_name",
+    type=str,
+    default="map.txt",
+    help="Name of map file in maps folder.",
+)
+parser.add_argument(
+    "-map_yaml",
+    "--map_yaml_filename",
+    type=str,
+    default="map.yaml",
+    help="Nme of map YAML file in maps folder.",
+)
+parser.add_argument(
+    "-timeout",
+    "--episode_timeout",
+    type=int,
+    default=200,
+    help="Episode timeout in steps.",
+)
+parser.add_argument(
+    "-results",
+    "--results_dir",
+    type=str,
+    default="results",
+    help="Directory to save results.",
+)
+
+
+def create_experiment_directory(base_dir: str) -> str:
+    # Create a unique experiment directory based on timestamp
+    experiment_name = datetime.now().strftime("%Y-%d-%m-%H-%M")
+    experiment_dir = os.path.join(base_dir, experiment_name)
+    os.makedirs(experiment_dir, exist_ok=True)
+    viz_dir = os.path.join(experiment_dir, "rollouts")
+    os.makedirs(viz_dir, exist_ok=True)
+    return experiment_dir
+
+
+def setup_environment(map_path: str, map_yaml_path: str, episode_timeout: int):
+    env = key_door_env.KeyDoorEnv(
+        map_ascii_path=map_path,
+        map_yaml_path=map_yaml_path,
+        representation="agent_position",
+        episode_timeout=episode_timeout,
+    )
+    env = visualisation_env.VisualisationEnv(env)
+
+    return env
+
+
+def setup_model(model_type: str, state_space, action_space):
+    if model_type == "q_learning":
+        return q_learning.QLearning(
+            state_space=env.state_space,
+            action_space=env.action_space,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            exploration_rate=args.exploration_rate,
+            exploration_decay=args.exploration_decay,
+        )
+    elif model_type == "ppo":
+        return ppo.PPO()
+    elif model_type == "dqn":
+        return dqn.DQN()
+
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+
+def train(
+    model,
+    env,
+    num_episodes,
+    episode_timeout,
+    test_frequency,
+    visualisation_frequency,
+    save_dir,
+):
+
+    episode_lengths = []
+    episode_rewards = []
+
+    test_episode_lengths = []
+    test_episode_rewards = []
+
+    for i in range(num_episodes):
+
+        episode_length = 0
+        episode_reward = 0
+
+        state = env.reset_environment()
+
+        for step in range(episode_timeout):
+            action = model.select_action(state)
+            reward, next_state = env.step(action)
+
+            model.step(
+                state=state,
+                action=action,
+                reward=reward,
+                new_state=next_state,
+                active=env.active,
+            )
+
+            state = next_state
+
+            episode_length += 1
+            episode_reward += reward
+
+            if not env.active:
+                break
+        if i % test_frequency == 0:
+            test_reward, test_episode_length = test(model, env, episode_timeout)
+            test_episode_rewards.append(test_reward)
+            test_episode_lengths.append(test_episode_length)
+        if i % visualisation_frequency == 0:
+            env.visualise_episode_history(
+                save_path=os.path.join(save_dir, "rollouts", f"episode_{i}.mp4"),
+                history="test",
+            )
+
+        episode_lengths.append(episode_length)
+        episode_rewards.append(episode_reward)
+
+    np.savez(
+        os.path.join(save_dir, "training_stats.npz"),
+        episode_lengths=episode_lengths,
+        episode_rewards=episode_rewards,
+        test_episode_lengths=test_episode_lengths,
+        test_episode_rewards=test_episode_rewards,
+    )
+
+
+def test(model, env, episode_timeout):
+    state = env.reset_environment(train=False)
+    total_reward = 0
+    episode_length = 0
+    for step in range(episode_timeout):
+        action = model.select_greedy_action(state)
+        reward, next_state = env.step(action)
+        total_reward += reward
+        episode_length += 1
+        state = next_state
+        if not env.active:
+            break
+    return total_reward, episode_length
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    experiment_dir = create_experiment_directory(
+        base_dir=os.path.join(current_dir, args.results_dir)
+    )
+
+    # save args to experiment_dir
+    with open(os.path.join(experiment_dir, "args.txt"), "w") as f:
+        for arg, value in vars(args).items():
+            f.write(f"{arg}: {value}\n")
+
+    map_path = os.path.join(current_dir, "maps", args.map_name)
+    map_yaml_path = os.path.join(current_dir, "maps", args.map_yaml_filename)
+    env = setup_environment(
+        map_path=map_path,
+        map_yaml_path=map_yaml_path,
+        episode_timeout=args.episode_timeout,
+    )
+    model = setup_model(
+        model_type=args.model,
+        state_space=env.state_space,
+        action_space=env.action_space,
+    )
+    train(
+        model,
+        env,
+        args.num_episodes,
+        args.episode_timeout,
+        args.test_frequency,
+        args.visualisation_frequency,
+        experiment_dir,
+    )
