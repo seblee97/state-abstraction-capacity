@@ -29,11 +29,10 @@ class QLearning(base.BaseModel):
         self._state_action_values = np.zeros((len(self._state_space), len(self._action_space)))
 
     def select_action(self, state):
-        state_id = self._state_id_mapping[state]
         if np.random.rand() < self._exploration_rate:
             action = np.random.choice(self._action_space)
         else:
-            action = self.select_greedy_action(state_id)
+            action = self.select_greedy_action(state)
         return action
     
     def select_greedy_action(self, state):
@@ -60,11 +59,13 @@ class QLearning(base.BaseModel):
 
         initial_value = self._state_action_values[state_id][action]
         new_sate_values = self._state_action_values[new_state_id]
+        
+        td_error = reward + discount * np.max(new_sate_values) - initial_value
 
-        updated_value = initial_value + self._learning_rate * (
-            reward + discount * np.max(new_sate_values) - initial_value
-        )
+        updated_value = initial_value + self._learning_rate * td_error
         self._state_action_values[state_id][action] = updated_value
+
+        return {"loss": td_error ** 2}
 
 
     def save_model(self, path):
