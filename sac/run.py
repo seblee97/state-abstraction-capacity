@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 import os
 from datetime import datetime
+from tqdm import tqdm
 
 
 # Get the directory of the current script
@@ -233,7 +234,12 @@ def train(
     test_episode_lengths = []
     test_episode_rewards = []
 
-    for i in range(num_episodes):
+    # Initialize variables for tqdm monitoring
+    latest_test_reward = None
+    latest_train_loss = None
+
+    pbar = tqdm(range(num_episodes))
+    for i in pbar:
 
         episode_length = 0
         episode_reward = 0
@@ -266,6 +272,7 @@ def train(
             test_reward, test_episode_length = test(model, env, episode_timeout)
             test_episode_rewards.append(test_reward)
             test_episode_lengths.append(test_episode_length)
+            latest_test_reward = test_reward
         if i % visualisation_frequency == 0:
             env.visualise_episode_history(
                 save_path=os.path.join(save_dir, "rollouts", f"episode_{i}.mp4"),
@@ -277,6 +284,17 @@ def train(
         episode_lengths.append(episode_length)
         episode_rewards.append(episode_reward)
         episode_losses.append(episode_loss / episode_length)
+        latest_train_loss = episode_loss / episode_length
+
+        # Update tqdm display with latest metrics
+        desc_parts = []
+        if latest_test_reward is not None:
+            desc_parts.append(f"Test Reward: {latest_test_reward:.2f}")
+        if latest_train_loss is not None and not np.isnan(latest_train_loss):
+            desc_parts.append(f"Train Loss: {latest_train_loss:.6f}")
+        
+        if desc_parts:
+            pbar.set_description(" | ".join(desc_parts))
 
     np.savez(
         os.path.join(save_dir, "training_stats.npz"),
