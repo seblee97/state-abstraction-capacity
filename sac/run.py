@@ -1,4 +1,5 @@
 from sac.models import q_learning, ppo, dqn
+from sac.trainers import q_trainer, ppo_trainer
 from key_door import key_door_env, visualisation_env
 import argparse
 import numpy as np
@@ -59,6 +60,13 @@ parser.add_argument(
     help="Number of training episodes.",
 )
 parser.add_argument(
+    "-ns",
+    "--num_steps",
+    type=int,
+    default=100000,
+    help="Number of training steps.",
+)
+parser.add_argument(
     "-bs", "--batch_size", type=int, default=64, help="Batch size for training."
 )
 parser.add_argument(
@@ -81,6 +89,55 @@ parser.add_argument(
     type=int,
     default=1000,
     help="Number of steps to populate the replay buffer before training (for DQN).",
+)
+parser.add_argument(
+    "-gae",
+    "--gae_lambda",
+    type=float,
+    default=0.95,
+    help="GAE lambda parameter (for PPO).",
+)
+parser.add_argument(
+    "-ue",
+    "--update_epochs",
+    type=int,
+    default=10,
+    help="Number of epochs to update the policy (for PPO).",
+)
+# parser.add_argument(
+#     "-rs",
+#     "--rollout_steps",
+#     type=int,
+#     default=2048,
+#     help="Number of steps to collect for each rollout (for PPO).",
+# )
+parser.add_argument(
+    "-vfc",
+    "--value_function_coef",
+    type=float,
+    default=0.5,
+    help="Coefficient for value function loss (for PPO).",
+)
+parser.add_argument(
+    "-ec",
+    "--entropy_coef",
+    type=float,
+    default=0.01,
+    help="Coefficient for entropy bonus (for PPO).",
+)
+parser.add_argument(
+    "-cc",
+    "--clip_coef",
+    type=float,
+    default=0.2,
+    help="Clipping coefficient for PPO.",
+)
+parser.add_argument(
+    "-mgn",
+    "--max_grad_norm",
+    type=float,
+    default=0.5,
+    help="Maximum gradient norm for clipping (for PPO).",
 )
 parser.add_argument(
     "-conv",
@@ -186,7 +243,22 @@ def setup_model(
             exploration_decay=args.exploration_decay,
         )
     elif model_type == "ppo":
-        return ppo.PPO()
+        sample_state = env.reset_environment()
+        num_actions = len(action_space)
+        return ppo.PPO(
+            sample_state=sample_state,
+            num_actions=num_actions,
+            batch_size=args.batch_size,
+            replay_buffer_size=args.replay_buffer_size,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            gae_lambda=args.gae_lambda,
+            clip_coef=args.clip_coef,
+            vf_coef=args.value_function_coef,
+            ent_coef=args.entropy_coef,
+            max_grad_norm=args.max_grad_norm,
+            convolutional=args.convolutional,
+        )
     elif model_type == "dqn":
         sample_state = env.reset_environment()
         num_actions = len(action_space)
@@ -206,93 +278,6 @@ def setup_model(
 
     else:
         raise ValueError(f"Unknown model type: {model_type}")
-
-
-def train(
-    model,
-    env,
-    num_episodes,
-    episode_timeout,
-    test_frequency,
-    visualisation_frequency,
-    save_dir,
-):
-
-    episode_lengths = []
-    episode_rewards = []
-    episode_losses = []
-
-    test_episode_lengths = []
-    test_episode_rewards = []
-
-    for i in range(num_episodes):
-
-        episode_length = 0
-        episode_reward = 0
-        episode_loss = 0
-
-        state = env.reset_environment()
-
-        for step in range(episode_timeout):
-            action = model.select_action(state)
-            reward, next_state = env.step(action)
-
-            info = model.step(
-                state=state,
-                action=action,
-                reward=reward,
-                new_state=next_state,
-                active=env.active,
-            )
-
-            state = next_state
-
-            episode_length += 1
-            episode_reward += reward
-            episode_loss += info.get("loss", np.nan)
-
-            if not env.active:
-                break
-
-        if i % test_frequency == 0:
-            test_reward, test_episode_length = test(model, env, episode_timeout)
-            test_episode_rewards.append(test_reward)
-            test_episode_lengths.append(test_episode_length)
-        if i % visualisation_frequency == 0:
-            env.visualise_episode_history(
-                save_path=os.path.join(save_dir, "rollouts", f"episode_{i}.mp4"),
-                history="test",
-            )
-        if i % args.save_model_frequency == 0:
-            model.save_model(save_dir, i)
-
-        episode_lengths.append(episode_length)
-        episode_rewards.append(episode_reward)
-        episode_losses.append(episode_loss / episode_length)
-
-    np.savez(
-        os.path.join(save_dir, "training_stats.npz"),
-        episode_lengths=episode_lengths,
-        episode_rewards=episode_rewards,
-        test_episode_lengths=test_episode_lengths,
-        test_episode_rewards=test_episode_rewards,
-        episode_losses=episode_losses,
-    )
-
-
-def test(model, env, episode_timeout):
-    state = env.reset_environment(train=False)
-    total_reward = 0
-    episode_length = 0
-    for step in range(episode_timeout):
-        action = model.select_greedy_action(state)
-        reward, next_state = env.step(action)
-        total_reward += reward
-        episode_length += 1
-        state = next_state
-        if not env.active:
-            break
-    return total_reward, episode_length
 
 
 if __name__ == "__main__":
@@ -319,12 +304,39 @@ if __name__ == "__main__":
         state_space=env.state_space,
         action_space=env.action_space,
     )
-    train(
-        model,
-        env,
-        args.num_episodes,
-        args.episode_timeout,
-        args.test_frequency,
-        args.visualisation_frequency,
-        experiment_dir,
-    )
+
+    if args.model == "q_learning":
+        q_trainer.train(
+            model=model,
+            env=env,
+            num_episodes=args.num_episodes,
+            episode_timeout=args.episode_timeout,
+            test_frequency=args.test_frequency,
+            save_model_frequency=args.save_model_frequency,
+            visualisation_frequency=args.visualisation_frequency,
+            experiment_dir=experiment_dir,
+        )
+    elif args.model == "ppo":
+        ppo_trainer.train(
+            model=model,
+            env=env,
+            num_steps=args.num_steps,
+            episode_timeout=args.episode_timeout,
+            replay_buffer_size=args.replay_buffer_size,
+            update_epochs=args.update_epochs,
+            test_frequency=args.test_frequency,
+            save_model_frequency=args.save_model_frequency,
+            visualisation_frequency=args.visualisation_frequency,
+            experiment_dir=experiment_dir,
+        )
+    elif args.model == "dqn":
+        q_trainer.train(
+            model=model,
+            env=env,
+            num_episodes=args.num_episodes,
+            episode_timeout=args.episode_timeout,
+            test_frequency=args.test_frequency,
+            save_model_frequency=args.save_model_frequency,
+            visualisation_frequency=args.visualisation_frequency,
+            experiment_dir=experiment_dir,
+        )
