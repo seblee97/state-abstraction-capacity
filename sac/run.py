@@ -45,6 +45,13 @@ parser.add_argument(
     help="Initial exploration rate for epsilon-greedy policy.",
 )
 parser.add_argument(
+    "-opt",
+    "--optimistic_init",
+    type=float,
+    default=0.0,
+    help="Optimistic initialization value for Q-network output bias.",
+)
+parser.add_argument(
     "-eps_decay",
     "--exploration_decay",
     type=float,
@@ -202,6 +209,7 @@ def setup_model(
             replay_buffer_size=args.replay_buffer_size,
             burnin=args.burnin,
             convolutional=args.convolutional,
+            optimistic_init=args.optimistic_init
         )
 
     else:
