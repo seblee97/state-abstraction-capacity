@@ -1,4 +1,4 @@
-from sac.models import q_learning, ppo, dqn
+from sac.models import q_learning, ppo, dqn, a2c
 from key_door import key_door_env, visualisation_env
 import argparse
 import numpy as np
@@ -21,7 +21,7 @@ parser.add_argument(
     "--model",
     type=str,
     default="q_learning",
-    choices=["q_learning", "ppo", "dqn"],
+    choices=["q_learning", "ppo", "dqn", "a2c"],
     help="Model to use for training.",
 )
 parser.add_argument(
@@ -89,6 +89,20 @@ parser.add_argument(
     type=int,
     default=1000,
     help="Number of steps to populate the replay buffer before training (for DQN).",
+)
+parser.add_argument(
+    "-a2c_vlc",
+    "--a2c_val_loss_coef",
+    type=float,
+    default=0.5,
+    help="Coefficient for value loss in A2C"
+)
+parser.add_argument(
+    "-a2c_elc",
+    "--a2c_entropy_loss_coef",
+    type=float,
+    default=0.5,
+    help="Coefficient for entropy exploration loss in A2C"
 )
 parser.add_argument(
     "-conv",
@@ -212,7 +226,18 @@ def setup_model(
             convolutional=args.convolutional,
             optimistic_init=args.optimistic_init
         )
-
+    elif model_type == "a2c":
+        sample_state = env.reset_environment()
+        num_actions = len(action_space)
+        return a2c.A2C(
+            sample_state=sample_state,
+            num_actions=num_actions,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            convolutional=args.convolutional,
+            value_loss_coef=args.a2c_val_loss_coef,
+            entropy_coef=args.a2c_entropy_loss_coef
+        )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
