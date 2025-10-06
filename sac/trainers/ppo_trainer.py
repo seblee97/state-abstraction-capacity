@@ -40,10 +40,9 @@ def train(
                 action, logp, _, value = model.select_action(state)
             action = action.item()
 
-            # if not env.active:
-            #     import pdb
+            logp   = float(logp.item())
+            value  = float(value.item())
 
-            #     pdb.set_trace()
             reward, next_state = env.step(action)
 
             model.add_to_buffer(
@@ -75,8 +74,9 @@ def train(
         with torch.no_grad():
             if env.active:
                 _, last_value = model.forward(state)
+                last_value = float(last_value.item())
             else:
-                last_value = torch.tensor(0.0).to(next(model._net.parameters()).device)
+                last_value = 0.0
 
         model.compute_gae(last_value)
 
