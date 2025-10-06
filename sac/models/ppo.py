@@ -108,6 +108,7 @@ class RolloutBuffer:
             self.full = True
 
     def reset(self):
+        self.buffer.clear()
         self.position = 0
         self.full = False
 
@@ -134,10 +135,11 @@ class RolloutBuffer:
             ) / (self.adv[:actual_size].std() + 1e-8)
 
     def get_minibatches(self, batch_size, shuffle=True):
-        idxs = np.arange(self.size)
+        actual_size = self.position if not self.full else self.size
+        idxs = np.arange(actual_size)
         if shuffle:
             np.random.shuffle(idxs)
-        for start in range(0, self.size, batch_size):
+        for start in range(0, actual_size, batch_size):
             end = start + batch_size
             mb_idx = idxs[start:end]
             states, actions, rewards, actives, logps, values = zip(
