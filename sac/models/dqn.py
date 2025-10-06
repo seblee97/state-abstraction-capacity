@@ -8,7 +8,7 @@ import torch.optim as optim
 
 
 class ConvDQNNet(nn.Module):
-    def __init__(self, output_dim):
+    def __init__(self, output_dim, optimistic_init=0.0):
         super(ConvDQNNet, self).__init__()
         self.conv1 = nn.Conv2d(
             1, 16, kernel_size=3, stride=1, padding=1
@@ -17,6 +17,10 @@ class ConvDQNNet(nn.Module):
         self.fc1 = nn.LazyLinear(128)  # infers in_features on first forward
         self.fc2 = nn.Linear(128, 128)
         self.fc3 = nn.Linear(128, output_dim)
+
+        # Optimistic initialization
+        if optimistic_init > 0:
+            nn.init.constant_(self.fc3.bias, optimistic_init)
 
     def forward(self, x):
         x = torch.relu(self.conv1(x))
@@ -29,11 +33,15 @@ class ConvDQNNet(nn.Module):
 
 
 class FFDQNNet(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, optimistic_init=0.0):
         super(FFDQNNet, self).__init__()
         self.fc1 = nn.Linear(input_dim, 128)
         self.fc2 = nn.Linear(128, 128)
         self.fc3 = nn.Linear(128, output_dim)
+
+        # Optimistic initialization
+        if optimistic_init > 0:
+            nn.init.constant_(self.fc3.bias, optimistic_init)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
@@ -74,33 +82,30 @@ class ReplayBuffer:
 class DQN(base.BaseModel):
 
     def __init__(
-        self,
-        sample_state,
-        num_actions,
-        batch_size: int,
-        learning_rate: float,
-        discount_factor: float,
-        exploration_rate: float,
-        exploration_decay: float,
-        target_update_frequency: int,
-        replay_buffer_size: int,
-        burnin: int,
-        convolutional: bool = False,
-    ):
+            self, 
+            sample_state,
+            num_actions, 
+            batch_size: int,
+            learning_rate: float, 
+            discount_factor: float, 
+            exploration_rate: float, 
+            exploration_decay: float,
+            target_update_frequency: int,
+            replay_buffer_size: int,
+            burnin: int,
+            convolutional: bool = False,
+            optimistic_init: float = 0.0,
+        ):
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         if convolutional:
-            net = ConvDQNNet(output_dim=num_actions)
+            net = ConvDQNNet(output_dim=num_actions, optimistic_init=optimistic_init)
             self._target_net = ConvDQNNet(output_dim=num_actions).to(self._device)
             self._state_shape = sample_state.shape[1:]  # cut batch dimension
         else:
-            net = FFDQNNet(
-                input_dim=len(sample_state.flatten()), output_dim=num_actions
-            )
-            self._target_net = FFDQNNet(
-                input_dim=len(sample_state.flatten()), output_dim=num_actions
-            ).to(self._device)
+            net = FFDQNNet(input_dim=len(sample_state.flatten()), output_dim=num_actions, optimistic_init=optimistic_init)
+            self._target_net = FFDQNNet(input_dim=len(sample_state.flatten()), output_dim=num_actions).to(self._device)
             self._state_shape = (len(sample_state.flatten()),)
 
         self._net = net.to(self._device)
@@ -137,7 +142,13 @@ class DQN(base.BaseModel):
         with torch.no_grad():
             q = self._net(torch.FloatTensor(state.reshape(shape)).to(self._device))
             return torch.argmax(q).item()
-
+    
+    def get_qvals(self, state):
+        shape = (1,) + self._state_shape
+        with torch.no_grad():
+            q = self._net(torch.FloatTensor(state.reshape(shape)).to(self._device))
+            return q
+    
     def step(
         self,
         state: tuple[int, int],
@@ -150,7 +161,7 @@ class DQN(base.BaseModel):
         self._buffer.push(state, action, reward, new_state, active)
 
         if len(self._buffer) < self._burnin:
-            return {}
+            return {"loss": np.nan}  # Return dict instead of None
 
         states, actions, rewards, next_states, actives = self._buffer.sample(
             self._batch_size
