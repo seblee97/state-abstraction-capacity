@@ -1,11 +1,10 @@
 from sac.models import q_learning, ppo, dqn, a2c
-from sac.trainers import q_trainer, ppo_trainer
+from sac.trainers import episodic_trainer, ppo_trainer
 from key_door import key_door_env, visualisation_env
 import argparse
 import numpy as np
 import os
 from datetime import datetime
-from tqdm import tqdm
 
 
 # Get the directory of the current script
@@ -307,112 +306,6 @@ def setup_model(
         raise ValueError(f"Unknown model type: {model_type}")
 
 
-def train(
-    model,
-    env,
-    num_episodes,
-    episode_timeout,
-    test_frequency,
-    visualisation_frequency,
-    save_dir,
-):
-
-    episode_lengths = []
-    episode_rewards = []
-    episode_losses = []
-
-    test_episode_lengths = []
-    test_episode_rewards = []
-
-    # Initialize variables for tqdm monitoring
-    latest_test_reward = None
-    latest_train_loss = None
-
-    pbar = tqdm(range(num_episodes))
-    for i in pbar:
-
-        episode_length = 0
-        episode_reward = 0
-        episode_loss = 0
-
-        state = env.reset_environment()
-
-        for step in range(episode_timeout):
-            action = model.select_action(state)
-            reward, next_state = env.step(action)
-
-            info = model.step(
-                state=state,
-                action=action,
-                reward=reward,
-                new_state=next_state,
-                active=env.active,
-            )
-
-            state = next_state
-
-            episode_length += 1
-            episode_reward += reward
-            episode_loss += info.get("loss", np.nan)
-
-            if not env.active:
-                break
-
-        if i % test_frequency == 0:
-            test_reward, test_episode_length = test(model, env, episode_timeout)
-            test_episode_rewards.append(test_reward)
-            test_episode_lengths.append(test_episode_length)
-            latest_test_reward = test_reward
-        if i % visualisation_frequency == 0:
-            env.visualise_episode_history(
-                save_path=os.path.join(save_dir, "rollouts", f"episode_{i}.mp4"),
-                history="test",
-            )
-        if i % args.save_model_frequency == 0:
-            model.save_model(save_dir, i)
-
-        episode_lengths.append(episode_length)
-        episode_rewards.append(episode_reward)
-        episode_losses.append(episode_loss / episode_length)
-        latest_train_loss = episode_loss / episode_length
-
-        # Update tqdm display with latest metrics
-        desc_parts = []
-        if latest_test_reward is not None:
-            desc_parts.append(f"Test Reward: {latest_test_reward:.2f}")
-        if latest_train_loss is not None and not np.isnan(latest_train_loss):
-            desc_parts.append(f"Train Loss: {latest_train_loss:.6f}")
-        if episode_reward is not None:
-            desc_parts.append(f"Episode Reward: {episode_reward:.2f}")
-        
-        if desc_parts:
-            pbar.set_description(" | ".join(desc_parts))
-
-    np.savez(
-        os.path.join(save_dir, "training_stats.npz"),
-        episode_lengths=episode_lengths,
-        episode_rewards=episode_rewards,
-        test_episode_lengths=test_episode_lengths,
-        test_episode_rewards=test_episode_rewards,
-        episode_losses=episode_losses,
-    )
-
-
-def test(model, env, episode_timeout):
-    state = env.reset_environment(train=False)
-    total_reward = 0
-    episode_length = 0
-    for step in range(episode_timeout):
-        action = model.select_greedy_action(state)
-        reward, next_state = env.step(action)
-        total_reward += reward
-        episode_length += 1
-        state = next_state
-        if not env.active:
-            break
-    return total_reward, episode_length
-
-
 if __name__ == "__main__":
     args = parser.parse_args()
     experiment_dir = create_experiment_directory(
@@ -438,8 +331,8 @@ if __name__ == "__main__":
         action_space=env.action_space,
     )
 
-    if args.model == "q_learning":
-        q_trainer.train(
+    if args.model in ["q_learning", "a2c", "dqn"]:
+        episodic_trainer.train(
             model=model,
             env=env,
             num_episodes=args.num_episodes,
@@ -457,17 +350,6 @@ if __name__ == "__main__":
             episode_timeout=args.episode_timeout,
             replay_buffer_size=args.replay_buffer_size,
             update_epochs=args.update_epochs,
-            test_frequency=args.test_frequency,
-            save_model_frequency=args.save_model_frequency,
-            visualisation_frequency=args.visualisation_frequency,
-            experiment_dir=experiment_dir,
-        )
-    elif args.model == "dqn":
-        q_trainer.train(
-            model=model,
-            env=env,
-            num_episodes=args.num_episodes,
-            episode_timeout=args.episode_timeout,
             test_frequency=args.test_frequency,
             save_model_frequency=args.save_model_frequency,
             visualisation_frequency=args.visualisation_frequency,
