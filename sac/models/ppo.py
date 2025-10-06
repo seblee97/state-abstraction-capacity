@@ -1,4 +1,5 @@
 import time
+import os
 import numpy as np
 import torch
 import torch.nn as nn
@@ -193,12 +194,19 @@ class PPO(base.BaseModel):
         self._ent_coef = ent_coef
         self._max_grad_norm = max_grad_norm
 
+        self._step_count = 0
+
         super().__init__()
 
     def select_action(self, state):
         return self._net.act(
             torch.FloatTensor(state.reshape(self._state_shape)).to(self._device)
         )
+
+    def select_greedy_action(self, state):
+        return self._net.evaluate(
+            torch.FloatTensor(state.reshape(self._state_shape)).to(self._device)
+        )[0].item()
 
     def forward(self, state):
         return self._net(
@@ -259,6 +267,8 @@ class PPO(base.BaseModel):
             nn.utils.clip_grad_norm_(self._net.parameters(), self._max_grad_norm)
             self._optimizer.step()
 
+            self._step_count += 1
+
             losses.append(loss.item())
             policy_losses.append(policy_loss.item())
             value_losses.append(value_loss.item())
@@ -271,8 +281,16 @@ class PPO(base.BaseModel):
             "entropy": np.mean(entropies),
         }
 
-    def save_model(self, path: str) -> None:
-        pass
+    def save_model(self, path: str, step: int) -> None:
+        save_path = os.path.join(path, f"dqn_model_{step}.pth")
+        torch.save(
+            {
+                "model_state_dict": self._net.state_dict(),
+                "optimizer_state_dict": self._optimizer.state_dict(),
+                "step_count": self._step_count,
+            },
+            save_path,
+        )
 
     def reset_buffer(self):
         self._buffer.reset()
