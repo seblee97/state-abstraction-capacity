@@ -6,7 +6,8 @@ from tqdm import tqdm
 
 def train(
     model,
-    env,
+    train_env,
+    test_env,
     num_episodes,
     episode_timeout,
     test_frequency,
@@ -34,18 +35,18 @@ def train(
         episode_reward = 0
         episode_loss = 0
 
-        state = env.reset_environment()
+        state = train_env.reset_environment()
 
         for step in range(episode_timeout):
             action = model.select_action(state)
-            reward, next_state = env.step(action)
+            reward, next_state = train_env.step(action)
 
             info = model.step(
                 state=state,
                 action=action,
                 reward=reward,
                 new_state=next_state,
-                active=env.active,
+                active=train_env.active,
             )
 
             state = next_state
@@ -54,20 +55,20 @@ def train(
             episode_reward += reward
             episode_loss += info.get("loss", np.nan)
 
-            if not env.active:
+            if not train_env.active:
                 break
 
         if i % test_frequency == 0:
-            test_reward, test_episode_length = test(model, env, episode_timeout)
+            test_reward, test_episode_length = test(model, test_env, episode_timeout)
             test_episode_rewards.append(test_reward)
             test_episode_lengths.append(test_episode_length)
             latest_test_reward = test_reward
         if i % visualisation_frequency == 0:
-            env.visualise_episode_history(
+            train_env.visualise_episode_history(
                 save_path=os.path.join(experiment_dir, "rollouts", f"train_episode_{i}.mp4"),
                 history="train",
             )
-            env.visualise_episode_history(
+            test_env.visualise_episode_history(
                 save_path=os.path.join(experiment_dir, "rollouts", f"test_episode_{i}.mp4"),
                 history="test",
             )

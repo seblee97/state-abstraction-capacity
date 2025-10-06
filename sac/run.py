@@ -149,7 +149,7 @@ parser.add_argument(
     "-test",
     "--test_frequency",
     type=int,
-    default=50,
+    default=5,
     help="Frequency of testing the model during training.",
 )
 parser.add_argument(
@@ -163,7 +163,7 @@ parser.add_argument(
     "-viz",
     "--visualisation_frequency",
     type=int,
-    default=50,
+    default=5,
     help="Frequency of visualising (episode rollouts, value functions etc.) during training.",
 )
 parser.add_argument(
@@ -178,7 +178,14 @@ parser.add_argument(
     "--map_yaml_filename",
     type=str,
     default="map.yaml",
-    help="Nme of map YAML file in maps folder.",
+    help="Name of map YAML file for training in maps folder.",
+)
+parser.add_argument(
+    "-test_map_yaml",
+    "--test_map_yaml_filename",
+    type=str,
+    default="test_map.yaml",
+    help="Name of map YAML file for test in maps folder.",
 )
 parser.add_argument(
     "-rep",
@@ -215,24 +222,37 @@ def create_experiment_directory(base_dir: str) -> str:
 
 
 def setup_environment(
-    map_path: str, map_yaml_path: str, episode_timeout: int, representation: str
+    map_path: str,
+    map_yaml_path: str,
+    test_map_yaml_path: str,
+    episode_timeout: int,
+    representation: str,
 ):
-    env = key_door_env.KeyDoorEnv(
+    train_env = key_door_env.KeyDoorEnv(
         map_ascii_path=map_path,
         map_yaml_path=map_yaml_path,
         representation=representation,
         episode_timeout=episode_timeout,
     )
-    env = visualisation_env.VisualisationEnv(env)
+    train_env = visualisation_env.VisualisationEnv(train_env)
 
-    return env
+    test_env = key_door_env.KeyDoorEnv(
+        map_ascii_path=map_path,
+        map_yaml_path=test_map_yaml_path,
+        representation=representation,
+        episode_timeout=episode_timeout,
+    )
+    test_env = visualisation_env.VisualisationEnv(test_env)
+
+    return train_env, test_env
 
 
 def setup_model(
     model_type: str,
-    state_space,
-    action_space,
+    env
 ):
+    state_space = env.state_space
+    action_space = env.action_space
     if model_type == "q_learning":
         return q_learning.QLearning(
             state_space=state_space,
@@ -305,22 +325,24 @@ if __name__ == "__main__":
 
     map_path = os.path.join(current_dir, "maps", args.map_name)
     map_yaml_path = os.path.join(current_dir, "maps", args.map_yaml_filename)
-    env = setup_environment(
+    test_map_yaml_path = os.path.join(current_dir, "maps", args.test_map_yaml_filename)
+    train_env, test_env = setup_environment(
         map_path=map_path,
         map_yaml_path=map_yaml_path,
+        test_map_yaml_path=test_map_yaml_path,
         episode_timeout=args.episode_timeout,
         representation=args.representation,
     )
     model = setup_model(
         model_type=args.model,
-        state_space=env.state_space,
-        action_space=env.action_space,
+        env=train_env,
     )
 
     if args.model in ["q_learning", "a2c", "dqn"]:
         episodic_trainer.train(
             model=model,
-            env=env,
+            train_env=train_env,
+            test_env=test_env,
             num_episodes=args.num_episodes,
             episode_timeout=args.episode_timeout,
             test_frequency=args.test_frequency,
@@ -331,7 +353,8 @@ if __name__ == "__main__":
     elif args.model == "ppo":
         ppo_trainer.train(
             model=model,
-            env=env,
+            train_env=train_env,
+            test_env=test_env,
             num_steps=args.num_steps,
             episode_timeout=args.episode_timeout,
             replay_buffer_size=args.replay_buffer_size,

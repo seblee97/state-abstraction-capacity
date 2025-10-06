@@ -7,7 +7,8 @@ from tqdm import tqdm
 
 def train(
     model,
-    env,
+    train_env,
+    test_env,
     num_steps,
     replay_buffer_size,
     episode_timeout,
@@ -18,7 +19,7 @@ def train(
     experiment_dir,
 ):
 
-    state = env.reset_environment()
+    state = train_env.reset_environment()
 
     episode_returns = []
     episode_lengths = []
@@ -47,13 +48,13 @@ def train(
                 logp   = float(logp.item())
                 value  = float(value.item())
 
-                reward, next_state = env.step(action)
+                reward, next_state = train_env.step(action)
 
                 model.add_to_buffer(
                     state=state,
                     action=action,
                     reward=reward,
-                    active=env.active,
+                    active=train_env.active,
                     logp=logp,
                     value=value,
                 )
@@ -65,19 +66,19 @@ def train(
                 global_step += 1
                 pbar.update(1)
 
-                if not env.active:
+                if not train_env.active:
                     episode_returns.append(episode_return)
                     episode_lengths.append(episode_length)
                     episode_return = 0.0
                     episode_length = 0
-                    state = env.reset_environment()
+                    state = train_env.reset_environment()
 
                 if global_step >= num_steps:
                     break
 
             # Bootstrap value for last state (should be 0 if episode ended)
             with torch.no_grad():
-                if env.active:
+                if train_env.active:
                     _, last_value = model.forward(state)
                     last_value = float(last_value.item())
                 else:
@@ -94,7 +95,7 @@ def train(
 
             # Periodic testing and saving
             if update_count % test_frequency == 0 or global_step >= num_steps:
-                test_return, test_episode_length = test(model, env, episode_timeout)
+                test_return, test_episode_length = test(model, test_env, episode_timeout)
                 test_episode_returns.append(test_return)
                 test_episode_lengths.append(test_episode_length)
 
@@ -104,8 +105,13 @@ def train(
                 rollouts_dir = os.path.join(experiment_dir, "rollouts")
                 os.makedirs(rollouts_dir, exist_ok=True)
 
-                env.visualise_episode_history(
-                    save_path=os.path.join(rollouts_dir, f"episode_{global_step}.mp4"),
+                train_env.visualise_episode_history(
+                    save_path=os.path.join(rollouts_dir, f"train_episode_{global_step}.mp4"),
+                    history="train",
+                )
+
+                test_env.visualise_episode_history(
+                    save_path=os.path.join(rollouts_dir, f"test_episode_{global_step}.mp4"),
                     history="test",
                 )
 
