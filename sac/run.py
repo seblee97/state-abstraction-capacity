@@ -101,7 +101,7 @@ parser.add_argument(
     "-a2c_elc",
     "--a2c_entropy_loss_coef",
     type=float,
-    default=0.5,
+    default=0.01,
     help="Coefficient for entropy exploration loss in A2C"
 )
 parser.add_argument(
@@ -317,6 +317,8 @@ def train(
             desc_parts.append(f"Test Reward: {latest_test_reward:.2f}")
         if latest_train_loss is not None and not np.isnan(latest_train_loss):
             desc_parts.append(f"Train Loss: {latest_train_loss:.6f}")
+        if episode_reward is not None:
+            desc_parts.append(f"Episode Reward: {episode_reward:.2f}")
         
         if desc_parts:
             pbar.set_description(" | ".join(desc_parts))
