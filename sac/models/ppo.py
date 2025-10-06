@@ -112,10 +112,11 @@ class RolloutBuffer:
         self.full = False
 
     def compute_gae(self, last_value, gamma, lam):
+        actual_size = self.position if not self.full else self.size
         adv = 0.0
-        for t in reversed(range(self.size)):
+        for t in reversed(range(actual_size)):
             next_nonterminal = self.buffer[t][3]
-            next_value = last_value if t == self.size - 1 else self.buffer[t + 1][5]
+            next_value = last_value if t == actual_size - 1 else self.buffer[t + 1][5]
             delta = (
                 self.buffer[t][2]
                 + gamma * next_value * next_nonterminal
@@ -123,8 +124,14 @@ class RolloutBuffer:
             )
             adv = delta + gamma * lam * next_nonterminal * adv
             self.adv[t] = adv
-        self.returns = self.adv + [i[5] for i in self.buffer]  # normalize advantages
-        self.adv = (self.adv - self.adv.mean()) / (self.adv.std() + 1e-8)
+        self.returns[:actual_size] = self.adv[:actual_size] + [
+            i[5] for i in self.buffer[:actual_size]
+        ]
+        # Normalize advantages only over actual data
+        if actual_size > 1:
+            self.adv[:actual_size] = (
+                self.adv[:actual_size] - self.adv[:actual_size].mean()
+            ) / (self.adv[:actual_size].std() + 1e-8)
 
     def get_minibatches(self, batch_size, shuffle=True):
         idxs = np.arange(self.size)
