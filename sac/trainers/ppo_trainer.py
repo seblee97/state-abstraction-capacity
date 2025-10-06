@@ -49,9 +49,9 @@ def train(
             model.add_to_buffer(
                 state=state,
                 action=action,
-                logp=logp,
                 reward=reward,
                 active=env.active,
+                logp=logp,
                 value=value,
             )
 

@@ -226,8 +226,8 @@ class PPO(base.BaseModel):
     def compute_gae(self, last_value):
         self._buffer.compute_gae(last_value, self._discount_factor, self._gae_lambda)
 
-    def add_to_buffer(self, state, action, logp, reward, active, value):
-        self._buffer.push(state, action, logp, reward, active, value)
+    def add_to_buffer(self, state, action, reward, active, logp, value):
+        self._buffer.push(state, action, reward, active, logp, value)
 
     def step(self):
 
