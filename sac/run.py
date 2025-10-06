@@ -116,14 +116,14 @@ parser.add_argument(
     "--value_function_coef",
     type=float,
     default=0.5,
-    help="Coefficient for value function loss (for PPO).",
+    help="Coefficient for value function loss (for PPO and A2C).",
 )
 parser.add_argument(
     "-ec",
     "--entropy_coef",
     type=float,
     default=0.01,
-    help="Coefficient for entropy bonus (for PPO).",
+    help="Coefficient for entropy bonus (for PPO and A2C).",
 )
 parser.add_argument(
     "-cc",
@@ -138,20 +138,6 @@ parser.add_argument(
     type=float,
     default=0.5,
     help="Maximum gradient norm for clipping (for PPO).",
-)
-parser.add_argument(
-    "-a2c_vlc",
-    "--a2c_val_loss_coef",
-    type=float,
-    default=0.5,
-    help="Coefficient for value loss in A2C"
-)
-parser.add_argument(
-    "-a2c_elc",
-    "--a2c_entropy_loss_coef",
-    type=float,
-    default=0.01,
-    help="Coefficient for entropy exploration loss in A2C"
 )
 parser.add_argument(
     "-conv",
@@ -299,8 +285,8 @@ def setup_model(
             learning_rate=args.learning_rate,
             discount_factor=args.discount_factor,
             convolutional=args.convolutional,
-            value_loss_coef=args.a2c_val_loss_coef,
-            entropy_coef=args.a2c_entropy_loss_coef
+            value_loss_coef=args.value_function_coef,
+            entropy_coef=args.entropy_coef,
         )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
