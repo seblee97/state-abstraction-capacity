@@ -1,9 +1,10 @@
-from sac.models import q_learning, ppo, dqn
+from sac.models import q_learning, ppo, dqn, a2c
 from key_door import key_door_env, visualisation_env
 import argparse
 import numpy as np
 import os
 from datetime import datetime
+from tqdm import tqdm
 
 
 # Get the directory of the current script
@@ -20,7 +21,7 @@ parser.add_argument(
     "--model",
     type=str,
     default="q_learning",
-    choices=["q_learning", "ppo", "dqn"],
+    choices=["q_learning", "ppo", "dqn", "a2c"],
     help="Model to use for training.",
 )
 parser.add_argument(
@@ -43,6 +44,13 @@ parser.add_argument(
     type=float,
     default=1.0,
     help="Initial exploration rate for epsilon-greedy policy.",
+)
+parser.add_argument(
+    "-opt",
+    "--optimistic_init",
+    type=float,
+    default=0.0,
+    help="Optimistic initialization value for Q-network output bias.",
 )
 parser.add_argument(
     "-eps_decay",
@@ -81,6 +89,20 @@ parser.add_argument(
     type=int,
     default=1000,
     help="Number of steps to populate the replay buffer before training (for DQN).",
+)
+parser.add_argument(
+    "-a2c_vlc",
+    "--a2c_val_loss_coef",
+    type=float,
+    default=0.5,
+    help="Coefficient for value loss in A2C"
+)
+parser.add_argument(
+    "-a2c_elc",
+    "--a2c_entropy_loss_coef",
+    type=float,
+    default=0.01,
+    help="Coefficient for entropy exploration loss in A2C"
 )
 parser.add_argument(
     "-conv",
@@ -202,8 +224,20 @@ def setup_model(
             replay_buffer_size=args.replay_buffer_size,
             burnin=args.burnin,
             convolutional=args.convolutional,
+            optimistic_init=args.optimistic_init
         )
-
+    elif model_type == "a2c":
+        sample_state = env.reset_environment()
+        num_actions = len(action_space)
+        return a2c.A2C(
+            sample_state=sample_state,
+            num_actions=num_actions,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            convolutional=args.convolutional,
+            value_loss_coef=args.a2c_val_loss_coef,
+            entropy_coef=args.a2c_entropy_loss_coef
+        )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -225,7 +259,12 @@ def train(
     test_episode_lengths = []
     test_episode_rewards = []
 
-    for i in range(num_episodes):
+    # Initialize variables for tqdm monitoring
+    latest_test_reward = None
+    latest_train_loss = None
+
+    pbar = tqdm(range(num_episodes))
+    for i in pbar:
 
         episode_length = 0
         episode_reward = 0
@@ -258,6 +297,7 @@ def train(
             test_reward, test_episode_length = test(model, env, episode_timeout)
             test_episode_rewards.append(test_reward)
             test_episode_lengths.append(test_episode_length)
+            latest_test_reward = test_reward
         if i % visualisation_frequency == 0:
             env.visualise_episode_history(
                 save_path=os.path.join(save_dir, "rollouts", f"episode_{i}.mp4"),
@@ -269,6 +309,19 @@ def train(
         episode_lengths.append(episode_length)
         episode_rewards.append(episode_reward)
         episode_losses.append(episode_loss / episode_length)
+        latest_train_loss = episode_loss / episode_length
+
+        # Update tqdm display with latest metrics
+        desc_parts = []
+        if latest_test_reward is not None:
+            desc_parts.append(f"Test Reward: {latest_test_reward:.2f}")
+        if latest_train_loss is not None and not np.isnan(latest_train_loss):
+            desc_parts.append(f"Train Loss: {latest_train_loss:.6f}")
+        if episode_reward is not None:
+            desc_parts.append(f"Episode Reward: {episode_reward:.2f}")
+        
+        if desc_parts:
+            pbar.set_description(" | ".join(desc_parts))
 
     np.savez(
         os.path.join(save_dir, "training_stats.npz"),
