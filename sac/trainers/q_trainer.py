@@ -10,7 +10,7 @@ def train(
     test_frequency,
     save_model_frequency,
     visualisation_frequency,
-    save_dir,
+    experiment_dir,
 ):
 
     episode_lengths = []
@@ -55,18 +55,18 @@ def train(
             test_episode_lengths.append(test_episode_length)
         if i % visualisation_frequency == 0:
             env.visualise_episode_history(
-                save_path=os.path.join(save_dir, "rollouts", f"episode_{i}.mp4"),
+                save_path=os.path.join(experiment_dir, "rollouts", f"episode_{i}.mp4"),
                 history="test",
             )
         if i % save_model_frequency == 0:
-            model.save_model(save_dir, i)
+            model.save_model(experiment_dir, i)
 
         episode_lengths.append(episode_length)
         episode_rewards.append(episode_reward)
         episode_losses.append(episode_loss / episode_length)
 
     np.savez(
-        os.path.join(save_dir, "training_stats.npz"),
+        os.path.join(experiment_dir, "training_stats.npz"),
         episode_lengths=episode_lengths,
         episode_rewards=episode_rewards,
         test_episode_lengths=test_episode_lengths,
