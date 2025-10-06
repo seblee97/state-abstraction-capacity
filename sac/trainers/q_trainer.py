@@ -55,7 +55,11 @@ def train(
             test_episode_lengths.append(test_episode_length)
         if i % visualisation_frequency == 0:
             env.visualise_episode_history(
-                save_path=os.path.join(experiment_dir, "rollouts", f"episode_{i}.mp4"),
+                save_path=os.path.join(experiment_dir, "rollouts", f"train_episode_{i}.mp4"),
+                history="train",
+            )
+            env.visualise_episode_history(
+                save_path=os.path.join(experiment_dir, "rollouts", f"test_episode_{i}.mp4"),
                 history="test",
             )
         if i % save_model_frequency == 0:
