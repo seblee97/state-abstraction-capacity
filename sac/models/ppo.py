@@ -292,7 +292,7 @@ class PPO(base.BaseModel):
         }
 
     def save_model(self, path: str, step: int) -> None:
-        save_path = os.path.join(path, f"dqn_model_{step}.pth")
+        save_path = os.path.join(path, f"ppo_model_{step}.pth")
         torch.save(
             {
                 "model_state_dict": self._net.state_dict(),
