@@ -81,7 +81,7 @@ parser.add_argument(
     "--replay_buffer_size",
     type=int,
     default=10000,
-    help="Size of the replay buffer (for DQN).",
+    help="Size of the replay buffer (for DQN). Also acts as rollout size for PPO.",
 )
 parser.add_argument(
     "-burnin",
@@ -104,13 +104,6 @@ parser.add_argument(
     default=10,
     help="Number of epochs to update the policy (for PPO).",
 )
-# parser.add_argument(
-#     "-rs",
-#     "--rollout_steps",
-#     type=int,
-#     default=2048,
-#     help="Number of steps to collect for each rollout (for PPO).",
-# )
 parser.add_argument(
     "-vfc",
     "--value_function_coef",
