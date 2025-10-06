@@ -124,9 +124,9 @@ class RolloutBuffer:
             )
             adv = delta + gamma * lam * next_nonterminal * adv
             self.adv[t] = adv
-        self.returns[:actual_size] = self.adv[:actual_size] + [
+        self.returns[:actual_size] = np.array(self.adv[:actual_size]) + np.array([
             i[5] for i in self.buffer[:actual_size]
-        ]
+        ]).flatten()
         # Normalize advantages only over actual data
         if actual_size > 1:
             self.adv[:actual_size] = (
@@ -206,18 +206,21 @@ class PPO(base.BaseModel):
         super().__init__()
 
     def select_action(self, state):
+        shape = (1,) + self._state_shape
         return self._net.act(
-            torch.FloatTensor(state.reshape(self._state_shape)).to(self._device)
+            torch.FloatTensor(state.reshape(shape)).to(self._device)
         )
 
     def select_greedy_action(self, state):
+        shape = (1,) + self._state_shape
         return self._net.evaluate(
-            torch.FloatTensor(state.reshape(self._state_shape)).to(self._device)
+            torch.FloatTensor(state.reshape(shape)).to(self._device)
         )[0].item()
 
     def forward(self, state):
+        shape = (1,) + self._state_shape
         return self._net(
-            torch.FloatTensor(state.reshape(self._state_shape)).to(self._device)
+            torch.FloatTensor(state.reshape(shape)).to(self._device)
         )
 
     def compute_gae(self, last_value):
@@ -301,147 +304,3 @@ class PPO(base.BaseModel):
 
     def reset_buffer(self):
         self._buffer.reset()
-
-
-# def ppo(
-#     update_epochs=10,
-#     vf_coef=0.5,
-#     ent_coef=0.01,
-#     max_grad_norm=0.5,
-# ):
-#     # Seeding
-#     np.random.seed(seed)
-#     torch.manual_seed(seed)
-
-#     env = gym.make(env_id)
-#     obs_space = env.observation_space
-#     act_space = env.action_space
-#     assert len(obs_space.shape) == 1, "This basic script expects 1D observations."
-#     assert hasattr(act_space, "n"), "This basic script is for discrete action spaces."
-
-#     obs_dim = obs_space.shape[0]
-#     act_dim = act_space.n
-
-#     device = torch.device(device)
-#     net = ActorCritic(obs_dim, act_dim).to(device)
-#     opt = optim.Adam(net.parameters(), lr=lr, eps=1e-5)
-
-#     buffer = RolloutBuffer(rollout_steps, obs_dim, device)
-
-#     obs, _ = env.reset(seed=seed)
-#     obs = torch.tensor(obs, dtype=torch.float32, device=device)
-#     ep_returns = []
-#     ep_len = 0
-#     ep_ret = 0.0
-#     global_step = 0
-
-#     start_time = time.time()
-#     while global_step < total_steps:
-#         buffer.reset()
-#         # --- Collect rollout ---
-#         for _ in range(rollout_steps):
-#             with torch.no_grad():
-#                 action, logp, _, value = net.act(obs.unsqueeze(0))
-#             action = action.item()
-#             next_obs, reward, terminated, truncated, _ = env.step(action)
-#             done = terminated or truncated
-#             if render:
-#                 env.render()
-
-#             buffer.add(
-#                 obs,
-#                 torch.tensor(action, device=device),
-#                 logp.squeeze(0),
-#                 torch.tensor(reward, dtype=torch.float32, device=device),
-#                 torch.tensor(float(done), dtype=torch.float32, device=device),
-#                 value.squeeze(0),
-#             )
-
-#             ep_ret += reward
-#             ep_len += 1
-
-#             obs = torch.tensor(next_obs, dtype=torch.float32, device=device)
-#             global_step += 1
-
-#             if done:
-#                 ep_returns.append(ep_ret)
-#                 ep_ret = 0.0
-#                 ep_len = 0
-#                 obs, _ = env.reset()
-
-#                 obs = torch.tensor(obs, dtype=torch.float32, device=device)
-
-#             if global_step >= total_steps:
-#                 break
-
-#         # Bootstrap value for last state
-#         with torch.no_grad():
-#             _, last_value = net.forward(obs.unsqueeze(0))
-#             last_value = last_value.squeeze(0)
-#         buffer.compute_gae(last_value, gamma, gae_lambda)
-
-#         # --- PPO Update ---
-#         for _ in range(update_epochs):
-#             for b_obs, b_act, b_logp_old, b_adv, b_ret, _ in buffer.get_minibatches(
-#                 minibatch_size
-#             ):
-#                 logits, values = net.forward(b_obs)
-#                 dist = Categorical(logits=logits)
-#                 logp = dist.log_prob(b_act)
-#                 entropy = dist.entropy().mean()
-
-#                 ratio = (logp - b_logp_old).exp()
-#                 unclipped = ratio * b_adv
-#                 clipped = torch.clamp(ratio, 1 - clip_coef, 1 + clip_coef) * b_adv
-#                 policy_loss = -torch.min(unclipped, clipped).mean()
-
-#                 value_loss = 0.5 * (b_ret - values).pow(2).mean()
-
-#                 loss = policy_loss + vf_coef * value_loss - ent_coef * entropy
-
-#                 opt.zero_grad()
-#                 loss.backward()
-#                 nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
-#                 opt.step()
-
-#         if len(ep_returns) > 0 and (global_step // rollout_steps) % 5 == 0:
-#             avg = np.mean(ep_returns[-10:])
-#             fps = int((global_step) / (time.time() - start_time + 1e-8))
-#             print(f"step={global_step} | avg_return_last10={avg:.1f} | fps={fps}")
-
-#     env.close()
-#     # quick evaluation
-#     eval_env = gym.make(env_id)
-#     eval_obs, _ = eval_env.reset(seed=seed + 1)
-#     eval_obs = torch.tensor(eval_obs, dtype=torch.float32, device=device)
-#     returns = []
-#     for _ in range(10):
-#         done = False
-#         ep_r = 0.0
-#         while not done:
-#             with torch.no_grad():
-#                 act, _v = net.evaluate(eval_obs.unsqueeze(0))
-#             next_obs, r, terminated, truncated, _ = eval_env.step(int(act.item()))
-#             done = terminated or truncated
-#             ep_r += r
-#             eval_obs = torch.tensor(next_obs, dtype=torch.float32, device=device)
-#             if done:
-#                 returns.append(ep_r)
-#                 eval_obs, _ = eval_env.reset()
-#                 eval_obs = torch.tensor(eval_obs, dtype=torch.float32, device=device)
-#     eval_env.close()
-#     print(
-#         f"Evaluation mean return over 10 episodes: {np.mean(returns):.1f} ± {np.std(returns):.1f}"
-#     )
-
-
-# if __name__ == "__main__":
-#     # Example: python ppo_basic.py
-#     ppo(
-#         env_id="CartPole-v1",
-#         total_steps=100_000,
-#         rollout_steps=2048,
-#         update_epochs=10,
-#         minibatch_size=64,
-#         device="cpu",
-#     )
