@@ -80,14 +80,7 @@ class RolloutBuffer:
         self.buffer = []
         self.position = 0
         self.full = False
-
-        # self.obs = torch.zeros((size, obs_dim), dtype=torch.float32, device=device)
-        # self.actions = torch.zeros((size,), dtype=torch.long, device=device)
-        # self.logp = torch.zeros((size,), dtype=torch.float32, device=device)
-        # self.rewards = torch.zeros((size,), dtype=torch.float32, device=device)
-        # self.dones = torch.zeros((size,), dtype=torch.float32, device=device)
-        # self.values = torch.zeros((size,), dtype=torch.float32, device=device)
-
+        
         # computed after trajectory collection
         self.adv = np.zeros((size,), dtype=np.float32)
         self.returns = np.zeros((size,), dtype=np.float32)
@@ -97,12 +90,6 @@ class RolloutBuffer:
             self.buffer.append(None)
         self.buffer[self.position] = (state, action, reward, active, logp, value)
 
-        # self.obs[self.ptr] = torch.FloatTensor(obs).to(self._device)
-        # self.actions[self.ptr] = torch.LongTensor(action).to(self._device)
-        # self.logp[self.ptr] = torch.FloatTensor(logp).to(self._device)
-        # self.rewards[self.ptr] = torch.FloatTensor(reward).to(self._device)
-        # self.dones[self.ptr] = torch.FloatTensor(done).to(self._device)
-        # self.values[self.ptr] = torch.FloatTensor(value).to(self._device)
         self.position += 1
         if self.position >= self.size:
             self.full = True
