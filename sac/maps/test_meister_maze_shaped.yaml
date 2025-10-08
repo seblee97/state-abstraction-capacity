@@ -1,0 +1,44 @@
+start_position: [2, 22]
+
+key_positions: []
+
+door_positions: []
+
+# shaping rewards placed symmetrically across the map
+reward_positions:
+    - [39, 5]
+    - [22, 22]
+    - [22, 32]
+    - [22, 12]
+    - [32, 12]
+    - [12, 12]
+    - [12, 32]
+    - [32, 32]
+
+# provide either one set of statistics (used for all rewards)
+# or one set of statistics for each reward
+reward_statistics:
+    gaussian:
+        mean: 1
+        variance: 0.1 # note this should actually be the standard deviation but wrong term was used in key-door env.
+    gaussian:
+        mean: 0.01
+        variance: 0.001
+    gaussian:
+        mean: 0.01
+        variance: 0.001
+    gaussian:
+        mean: 0.01
+        variance: 0.001
+    gaussian:
+        mean: 0.01
+        variance: 0.001
+    gaussian:
+        mean: 0.01
+        variance: 0.001
+    gaussian:
+        mean: 0.01
+        variance: 0.001
+    gaussian:
+        mean: 0.01
+        variance: 0.001
