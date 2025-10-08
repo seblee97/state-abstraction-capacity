@@ -5,6 +5,22 @@ import torch
 from tqdm import tqdm
 
 
+def update_pbar_desc(pbar, train_loss=None, episode_return=None, test_return=None):
+    """Update tqdm progress bar description with current metrics."""
+    desc_parts = ["Training Progress"]
+    
+    if train_loss is not None:
+        desc_parts.append(f"Loss: {train_loss:.4f}")
+    
+    if episode_return is not None:
+        desc_parts.append(f"Ep Ret: {episode_return:.2f}")
+    
+    if test_return is not None:
+        desc_parts.append(f"Test Ret: {test_return:.2f}")
+    
+    pbar.set_description(" | ".join(desc_parts))
+
+
 def train(
     model,
     train_env,
@@ -32,6 +48,11 @@ def train(
     episode_return = 0.0
     global_step = 0
     update_count = 0
+    
+    # Variables for progress bar logging
+    latest_train_loss = None
+    latest_episode_return = None
+    latest_test_return = None
 
     with tqdm(total=num_steps, desc="Training Progress") as pbar:
 
@@ -69,6 +90,9 @@ def train(
                 if not train_env.active:
                     episode_returns.append(episode_return)
                     episode_lengths.append(episode_length)
+                    latest_episode_return = episode_return
+                    # Update progress bar description with current metrics
+                    update_pbar_desc(pbar, latest_train_loss, latest_episode_return, latest_test_return)
                     episode_return = 0.0
                     episode_length = 0
                     state = train_env.reset_environment()
@@ -89,7 +113,10 @@ def train(
             # PPO Update
             for _ in range(update_epochs):
                 info = model.step()
-                epoch_losses.append(info.get("loss", np.nan))
+                latest_train_loss = info.get("loss", np.nan)
+                epoch_losses.append(latest_train_loss)
+                # Update progress bar description with current metrics
+                update_pbar_desc(pbar, latest_train_loss, latest_episode_return, latest_test_return)
 
             update_count += 1
 
@@ -98,6 +125,7 @@ def train(
                 test_return, test_episode_length = test(model, test_env, episode_timeout)
                 test_episode_returns.append(test_return)
                 test_episode_lengths.append(test_episode_length)
+                latest_test_return = test_return
 
             # Periodic visualization
             if update_count % visualisation_frequency == 0 or global_step >= num_steps:
