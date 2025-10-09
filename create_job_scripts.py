@@ -1,5 +1,6 @@
 import os 
 import itertools
+import subprocess
 
 lrs = [0.0001, 0.0003, 0.0005]
 batch_sizes = [32, 128, 512]
@@ -30,4 +31,8 @@ for idx, (lr, batch_size, buffer_size, kl, epoch, entropy) in enumerate(
         f.write(job_script_template)
         f.write(f"python /mnt/home/slee1/state-abstraction-capacity/sac/run.py -m ppo -lr {lr} -bs {batch_size} -buf {buffer_size} -kl {kl} -ep {epoch} -ent {entropy}\n")
 
-    os.chmod(f"sbatch job_scripts/job_{idx}/job_{idx}", 0o755)
+    # make the script executable
+    os.chmod(f"job_scripts/job_{idx}/job_{idx}", 0o755)
+
+    # run the command to submit the job
+    subprocess.run(f"sbatch job_scripts/job_{idx}/job_{idx}", shell=True)
