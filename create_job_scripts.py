@@ -46,7 +46,7 @@ for idx, (lr, batch_size, buffer_size, kl, epoch, entropy) in enumerate(
         f.write(f"#SBATCH --output={job_dir}/output.txt\n")
         f.write(f"#SBATCH --error={job_dir}/error.txt\n")
         f.write("source /mnt/home/slee1/venvs/sac/bin/activate\n")
-        f.write(f"python /mnt/home/slee1/state-abstraction-capacity/sac/run.py -m ppo -rep pixel -conv -lr {lr} -bs {batch_size} -rbs {buffer_size} -kl {kl} -ue {epoch} -ec {entropy}\n")
+        f.write(f"python /mnt/home/slee1/state-abstraction-capacity/sac/run.py -results {job_dir} -m ppo -rep pixel -conv -lr {lr} -bs {batch_size} -rbs {buffer_size} -kl {kl} -ue {epoch} -ec {entropy}\n")
 
     # make the script executable
     os.chmod(f"job_scripts/{timestamp}/job_{idx}/job_{idx}", 0o755)
