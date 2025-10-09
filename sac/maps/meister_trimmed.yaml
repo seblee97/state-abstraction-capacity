@@ -1,0 +1,15 @@
+start_position: []
+
+key_positions: []
+
+door_positions: []
+
+reward_positions:
+    - [35, 1]
+
+# provide either one set of statistics (used for all rewards)
+# or one set of statistics for each reward
+reward_statistics:
+    gaussian:
+        mean: 1
+        variance: 0.1 # note this should actually be the standard deviation but wrong term was used in key-door env.
