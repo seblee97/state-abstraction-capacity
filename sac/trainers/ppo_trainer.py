@@ -25,6 +25,8 @@ def train(
     episode_lengths = []
     epoch_losses = []
 
+    all_info = []
+
     test_episode_lengths = []
     test_episode_returns = []
 
@@ -89,6 +91,7 @@ def train(
             # PPO Update
             for _ in range(update_epochs):
                 info = model.step()
+                all_info.append(info)
                 epoch_losses.append(info.get("loss", np.nan))
 
             update_count += 1
@@ -126,6 +129,7 @@ def train(
         test_episode_lengths=test_episode_lengths,
         test_episode_returns=test_episode_returns,
         epoch_losses=epoch_losses,
+        all_info=all_info,
     )
 
 
