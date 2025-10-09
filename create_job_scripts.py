@@ -35,4 +35,4 @@ for idx, (lr, batch_size, buffer_size, kl, epoch, entropy) in enumerate(
     os.chmod(f"job_scripts/job_{idx}/job_{idx}", 0o755)
 
     # run the command to submit the job
-    subprocess.run(f"sbatch job_scripts/job_{idx}/job_{idx}", shell=True)
+    subprocess.call(f"sbatch job_scripts/job_{idx}/job_{idx}", shell=True)
