@@ -26,8 +26,8 @@ class BaseActorCritic(nn.Module):
     @torch.no_grad()
     def evaluate(self, obs):
         logits, value = self.forward(obs)
-        dist = Categorical(logits=logits)
-        action = torch.argmax(dist.probs, dim=-1)
+        # dist = Categorical(logits=logits)
+        action = torch.argmax(logits, dim=-1)
         return action, value
 
 
@@ -159,6 +159,7 @@ class PPO(base.BaseModel):
         vf_coef: float,
         ent_coef: float,
         max_grad_norm: float,
+        target_kl: float,
         convolutional: bool = False,
     ):
 
@@ -189,6 +190,7 @@ class PPO(base.BaseModel):
         self._vf_coef = vf_coef
         self._ent_coef = ent_coef
         self._max_grad_norm = max_grad_norm
+        self._target_kl = target_kl
 
         self._step_count = 0
 
@@ -224,6 +226,7 @@ class PPO(base.BaseModel):
         policy_losses = []
         value_losses = []
         entropies = []
+        kls = []  # Track KL divergence
 
         for (
             states,
@@ -259,6 +262,9 @@ class PPO(base.BaseModel):
 
             value_loss = 0.5 * (returns_tensor - values_pred).pow(2).mean()
 
+            # Compute KL divergence
+            kl = (old_logps_tensor - logp).mean()
+
             loss = policy_loss + self._vf_coef * value_loss - self._ent_coef * entropy
 
             self._optimizer.zero_grad()
@@ -272,12 +278,19 @@ class PPO(base.BaseModel):
             policy_losses.append(policy_loss.item())
             value_losses.append(value_loss.item())
             entropies.append(entropy.item())
+            kls.append(kl.item())
+
+            # Early stopping based on KL divergence
+            if kl.item() > self._target_kl:
+                print(f"Early stopping at step due to reaching target KL: {kl.item():.4f}")
+                break
 
         return {
             "loss": np.mean(losses),
             "policy_loss": np.mean(policy_losses),
             "value_loss": np.mean(value_losses),
             "entropy": np.mean(entropies),
+            "kl": np.mean(kls),
         }
 
     def save_model(self, path: str, step: int) -> None:
