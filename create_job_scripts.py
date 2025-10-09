@@ -1,6 +1,7 @@
 import os 
 import itertools
 import subprocess
+import time
 
 lrs = [0.0001, 0.0003, 0.0005]
 batch_sizes = [32, 128, 512]
@@ -9,8 +10,12 @@ kls = [0.01, 0.02, 0.03]
 epochs = [3,5,7]
 entropies = [0.01, 0.02, 0.03]
 
-# Create a directory for job scripts if it doesn't exist
+# create a directory for job scripts if it doesn't exist
 os.makedirs("job_scripts", exist_ok=True)
+# create timestamped subdirectory for this sweep
+timestamp = time.strftime("%Y-%m-%d-%H-%M-%S")
+os.makedirs(f"job_scripts/{timestamp}", exist_ok=True)
+
 job_script_template = """#!/bin/bash
 #SBATCH -p genx
 #SBATCH --nodes 1
@@ -26,13 +31,13 @@ for idx, (lr, batch_size, buffer_size, kl, epoch, entropy) in enumerate(
     itertools.product(lrs, batch_sizes, buffer_sizes, kls, epochs, entropies)
 ):
     # create subdirectory for each job script
-    os.makedirs(f"job_scripts/job_{idx}", exist_ok=True)
-    with open(f"job_scripts/job_{idx}/job_{idx}", "w") as f:
+    os.makedirs(f"job_scripts/{timestamp}/job_{idx}", exist_ok=True)
+    with open(f"job_scripts/{timestamp}/job_{idx}/job_{idx}", "w") as f:
         f.write(job_script_template)
         f.write(f"python /mnt/home/slee1/state-abstraction-capacity/sac/run.py -m ppo -lr {lr} -bs {batch_size} -buf {buffer_size} -kl {kl} -ep {epoch} -ent {entropy}\n")
 
     # make the script executable
-    os.chmod(f"job_scripts/job_{idx}/job_{idx}", 0o755)
+    os.chmod(f"job_scripts/{timestamp}/job_{idx}/job_{idx}", 0o755)
 
     # run the command to submit the job
-    subprocess.call(f"sbatch job_scripts/job_{idx}/job_{idx}", shell=True)
+    subprocess.call(f"sbatch job_scripts/{timestamp}/job_{idx}/job_{idx}", shell=True)
