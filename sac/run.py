@@ -105,6 +105,13 @@ parser.add_argument(
     help="GAE lambda parameter (for PPO).",
 )
 parser.add_argument(
+    "-kl",
+    "--target_kl",
+    type=float,
+    default=0.03,
+    help="Target KL divergence for early stopping (for PPO).",
+)
+parser.add_argument(
     "-ue",
     "--update_epochs",
     type=int,
@@ -277,6 +284,7 @@ def setup_model(
             vf_coef=args.value_function_coef,
             ent_coef=args.entropy_coef,
             max_grad_norm=args.max_grad_norm,
+            target_kl=args.target_kl,
             convolutional=args.convolutional,
         )
     elif model_type == "dqn":
