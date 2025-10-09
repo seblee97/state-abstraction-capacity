@@ -216,6 +216,18 @@ parser.add_argument(
     default="results",
     help="Directory to save results.",
 )
+parser.add_argument(
+    "-abs_results",
+    "--absolute_results_dir",
+    type=str,
+    default=None,
+    help="Directory to save results (absolute path, overwrites relative).",
+)
+
+
+def organise_absolute_experiment_directory(dir: str) -> str:
+    viz_dir = os.path.join(dir, "rollouts")
+    os.makedirs(viz_dir, exist_ok=True)
 
 
 def create_experiment_directory(base_dir: str) -> str:
@@ -322,9 +334,13 @@ def setup_model(
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    experiment_dir = create_experiment_directory(
-        base_dir=os.path.join(current_dir, args.results_dir)
-    )
+    if args.absolute_results_dir is not None:
+        experiment_dir = args.absolute_results_dir
+        organise_absolute_experiment_directory(experiment_dir)
+    else:
+        experiment_dir = create_experiment_directory(
+            base_dir=os.path.join(current_dir, args.results_dir)
+        )
 
     # save args to experiment_dir
     with open(os.path.join(experiment_dir, "args.txt"), "w") as f:
