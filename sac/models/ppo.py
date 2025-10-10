@@ -41,7 +41,9 @@ class ConvActorCritic(BaseActorCritic):
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
         self.fc1 = nn.LazyLinear(128)  # infers in_features on first forward
         self.fc2 = nn.Linear(128, 128)
+        self.pi_fc = nn.Linear(128, 128)
         self.pi = nn.Linear(128, output_dim)
+        self.v_fc = nn.Linear(128, 128)
         self.v = nn.Linear(128, 1)
 
     def forward(self, x):
@@ -50,8 +52,8 @@ class ConvActorCritic(BaseActorCritic):
         x = x.view(x.size(0), -1)  # Flatten
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
-        logits = self.pi(x)
-        value = self.v(x).squeeze(-1)
+        logits = self.pi(torch.relu(self.pi_fc(x)))
+        value = self.v(torch.relu(self.v_fc(x))).squeeze(-1)
         return logits, value
 
 
@@ -160,6 +162,7 @@ class PPO(base.BaseModel):
         ent_coef: float,
         max_grad_norm: float,
         convolutional: bool = False,
+        weight_decay: float = 0.0,
     ):
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -177,7 +180,7 @@ class PPO(base.BaseModel):
 
         self._num_actions = num_actions
 
-        self._optimizer = optim.Adam(self._net.parameters(), lr=learning_rate)
+        self._optimizer = optim.AdamW(self._net.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
         self._buffer = RolloutBuffer(size=replay_buffer_size)
 
