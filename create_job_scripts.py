@@ -12,10 +12,11 @@ epochs = [3,5,7]
 entropies = [0.01, 0.02, 0.03]
 
 # create a directory for job scripts if it doesn't exist
-os.makedirs("job_scripts", exist_ok=True)
+base_results = "/mnt/home/slee1/ceph/job_scripts"
+os.makedirs(base_results, exist_ok=True)
 # create timestamped subdirectory for this sweep
 timestamp = time.strftime("%Y-%m-%d-%H-%M-%S")
-os.makedirs(f"job_scripts/{timestamp}", exist_ok=True)
+os.makedirs(f"{base_results}/{timestamp}", exist_ok=True)
 
 job_script_template = """#!/bin/bash
 #SBATCH -p genx
@@ -39,7 +40,7 @@ for idx, (lr, batch_size, buffer_size, kl, epoch, entropy) in enumerate(
         "entropy": entropy,
     }
     # create subdirectory for each job script
-    job_dir = os.path.join(f"job_scripts/{timestamp}", f"job_{idx}")
+    job_dir = os.path.join(f"{base_results}/{timestamp}", f"job_{idx}")
     os.makedirs(job_dir, exist_ok=True)
     with open(f"{job_dir}/job_{idx}", "w") as f:
         f.write(job_script_template)
@@ -49,9 +50,9 @@ for idx, (lr, batch_size, buffer_size, kl, epoch, entropy) in enumerate(
         f.write(f"python /mnt/home/slee1/state-abstraction-capacity/sac/run.py -abs_results {job_dir} -m ppo -rep pixel -conv -lr {lr} -bs {batch_size} -rbs {buffer_size} -kl {kl} -ue {epoch} -ec {entropy}\n")
 
     # make the script executable
-    os.chmod(f"job_scripts/{timestamp}/job_{idx}/job_{idx}", 0o755)
+    os.chmod(f"{base_results}/{timestamp}/job_{idx}/job_{idx}", 0o755)
 
     # run the command to submit the job
-    subprocess.call(f"sbatch job_scripts/{timestamp}/job_{idx}/job_{idx}", shell=True)
+    subprocess.call(f"sbatch {base_results}/{timestamp}/job_{idx}/job_{idx}", shell=True)
 
-np.save(f"job_scripts/{timestamp}/sweep_config.npy", sweep_config)
+np.save(f"{base_results}/{timestamp}/sweep_config.npy", sweep_config)
