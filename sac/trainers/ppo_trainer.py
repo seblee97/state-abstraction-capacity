@@ -122,8 +122,18 @@ def train(
             if update_count % save_model_frequency == 0 or global_step >= num_steps:
                 model.save_model(experiment_dir, global_step)
 
+                np.savez(
+                    os.path.join(experiment_dir, f"training_stats_{global_step}.npz"),
+                    episode_lengths=episode_lengths,
+                    episode_returns=episode_returns,
+                    test_episode_lengths=test_episode_lengths,
+                    test_episode_returns=test_episode_returns,
+                    epoch_losses=epoch_losses,
+                    all_info=all_info,
+                )
+    
     np.savez(
-        os.path.join(experiment_dir, "training_stats.npz"),
+        os.path.join(experiment_dir, f"final_training_stats.npz"),
         episode_lengths=episode_lengths,
         episode_returns=episode_returns,
         test_episode_lengths=test_episode_lengths,
