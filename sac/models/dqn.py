@@ -44,6 +44,8 @@ class FFDQNNet(nn.Module):
             nn.init.constant_(self.fc3.bias, optimistic_init)
 
     def forward(self, x):
+        if isinstance(x, tuple):
+            x = torch.FloatTensor(x).to(next(self.parameters()).device)
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         x = self.fc3(x)
@@ -95,6 +97,7 @@ class DQN(base.BaseModel):
             burnin: int,
             convolutional: bool = False,
             optimistic_init: float = 0.0,
+            weight_decay: float = 0.0,
         ):
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -104,6 +107,8 @@ class DQN(base.BaseModel):
             self._target_net = ConvDQNNet(output_dim=num_actions).to(self._device)
             self._state_shape = sample_state.shape[1:]  # cut batch dimension
         else:
+            if isinstance(sample_state, tuple):
+                sample_state = np.array(sample_state)
             net = FFDQNNet(input_dim=len(sample_state.flatten()), output_dim=num_actions, optimistic_init=optimistic_init)
             self._target_net = FFDQNNet(input_dim=len(sample_state.flatten()), output_dim=num_actions).to(self._device)
             self._state_shape = (len(sample_state.flatten()),)
@@ -115,7 +120,7 @@ class DQN(base.BaseModel):
 
         self._num_actions = num_actions
 
-        self._optimizer = optim.Adam(self._net.parameters(), lr=learning_rate)
+        self._optimizer = optim.AdamW(self._net.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
         self._buffer = ReplayBuffer(capacity=replay_buffer_size)
 
@@ -131,6 +136,8 @@ class DQN(base.BaseModel):
         super().__init__()
 
     def select_action(self, state):
+        if isinstance(state, tuple):
+            state = np.array(state)
         if np.random.rand() < self._exploration_rate:
             action = np.random.choice(range(self._num_actions))
         else:
@@ -138,6 +145,8 @@ class DQN(base.BaseModel):
         return action
 
     def select_greedy_action(self, state):
+        if isinstance(state, tuple):
+            state = np.array(state)
         shape = (1,) + self._state_shape
         with torch.no_grad():
             q = self._net(torch.FloatTensor(state.reshape(shape)).to(self._device))
