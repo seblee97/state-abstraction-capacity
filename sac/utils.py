@@ -2,6 +2,36 @@ import numpy as np
 from collections import defaultdict
 
 
+def prepare_abstraction(env):
+    S = len(env.state_space)
+    A = len(env.action_space)
+
+    P = np.zeros((S, A, S))
+    R = np.zeros((S, A))
+
+    state_id_mapping = {state: i for i, state in enumerate(env.state_space)}
+
+    reward_positions = list(env._rewards.keys())
+
+    for state in env.state_space:
+        state_index = state_id_mapping[state]
+        if state not in reward_positions:
+            for action in env.action_space:
+                # set env and transition
+                env.reset_environment(train=True)
+                env.move_agent_to(state)
+                reward, new_state = env.step(action)
+                if reward > 0:
+                    print(
+                        f"From state {state} taking action {action} to state {new_state} with reward {reward}"
+                    )
+                new_state_index = state_id_mapping[new_state[:2]]
+                P[state_index][action][new_state_index] = 1
+                R[state_index][action] = reward
+
+    return P, R
+
+
 def deterministic_bisimulation(P, R, *, atol=0.0):
     """
     Compute the coarsest bisimulation partition for a finite MDP.
@@ -227,8 +257,9 @@ def joint_state_action_abstraction(P, R, *, atol=0.0):
         # Sanity: the set of SA classes must be identical for all states in the block
         base_set = {sa_label[s0, a] for a in range(A)}
         for s in reps[1:]:
-            assert {sa_label[s, a] for a in range(A)} == base_set, \
-                "Inconsistent SA-classes within a state block (should not happen at fixpoint)."
+            assert {
+                sa_label[s, a] for a in range(A)
+            } == base_set, "Inconsistent SA-classes within a state block (should not happen at fixpoint)."
 
         # For each SA class available in this block, pick any (s,a) in the block with that class
         inv_map = defaultdict(list)
@@ -249,41 +280,56 @@ def joint_state_action_abstraction(P, R, *, atol=0.0):
         # All (s,a) in this cls within this block must produce the same R and P_tilde row
         # due to construction; if you like, assert here.
 
-    return (state_blocks, sa_blocks, state_label, sa_label,
-            P_tilde, R_tilde, action_index_per_block)
+    return (
+        state_blocks,
+        sa_blocks,
+        state_label,
+        sa_label,
+        P_tilde,
+        R_tilde,
+        action_index_per_block,
+    )
 
 
+def build_quotient_Q_struct(
+    state_blocks, state_label, sa_label, action_index_per_block
+):
+    K = len(state_blocks)
+    A_b = [len(mapping) for mapping in action_index_per_block]
+    A_b_max = max(A_b)
 
-# --------------------------
-# Minimal example & sanity check
-if __name__ == "__main__":
-    # 4 states, 2 actions
-    S, A = 4, 2
-    P = np.zeros((S, A, S))
-    R = np.zeros((S, A))
+    # Q_tilde padded; invalid entries masked out
+    Q_tilde = np.zeros((K, A_b_max), dtype=np.float64)
+    valid_mask = np.zeros((K, A_b_max), dtype=bool)
+    for b in range(K):
+        valid_mask[b, : A_b[b]] = True
 
-    # States 0 and 1 will be bisimilar; 2 and 3 distinct
-    # Reward structure:
-    R[0, :] = [1.0, 0.5]
-    R[1, :] = [1.0, 0.5]
-    R[2, :] = [0.0, 0.0]
-    R[3, :] = [2.0, 2.0]
+    # Helper: map a base (s,a) -> (b, i) abstract indices
+    def to_abstract(s, a):
+        b = state_label[s]
+        sa_cls = sa_label[s, a]
+        i = action_index_per_block[b][sa_cls]
+        return b, i
 
-    # Transitions:
-    # 0 and 1: under both actions, 0.7->2 and 0.3->3 (identical)
-    for s in [0, 1]:
-        for a in range(A):
-            P[s, a, 2] = 0.7
-            P[s, a, 3] = 0.3
-    # 2: self-loop
-    for a in range(A):
-        P[2, a, 2] = 1.0
-    # 3: self-loop
-    for a in range(A):
-        P[3, a, 3] = 1.0
+    # Helper: for execution, map (b, i, s) -> a_base (choose a representative)
+    # Build representatives per (b, i, s) so we can act in the base MDP.
+    rep_action = {}  # (s, i) -> a
+    for b in range(K):
+        # for this block, collect all (sa_class -> local index i)
+        inv = defaultdict(list)  # sa_class -> list of (s,a) that realize it
+        # Use any state in the block as source of classes
+        for s in state_blocks[b]:
+            for a in range(sa_label.shape[1]):
+                cls = sa_label[s, a]
+                if cls in action_index_per_block[b]:  # available here
+                    inv[cls].append((s, a))
+        # pick a representative per state and local action i
+        for cls, i in action_index_per_block[b].items():
+            for s, a in inv[cls]:
+                rep_action[(s, i)] = a
 
-    blocks, label = deterministic_bisimulation(P, R)
-    print("Blocks:", blocks)  # Expect something like [[0,1],[2],[3]]
-    print("Labels:", label)
+    def to_base_action(b, i, s):
+        # s must belong to block b
+        return rep_action[(s, i)]
 
-   
+    return Q_tilde, valid_mask, to_abstract, to_base_action
