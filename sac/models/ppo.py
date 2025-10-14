@@ -33,7 +33,7 @@ class BaseActorCritic(nn.Module):
 
 class ConvActorCritic(BaseActorCritic):
 
-    def __init__(self, output_dim):
+    def __init__(self, output_dim, layer_norm=False, optimistic_init=0.0):
         super(ConvActorCritic, self).__init__()
         self.conv1 = nn.Conv2d(
             1, 16, kernel_size=3, stride=1, padding=1
@@ -44,14 +44,35 @@ class ConvActorCritic(BaseActorCritic):
         self.pi_fc = nn.Linear(128, 128)
         self.pi = nn.Linear(128, output_dim)
         self.v_fc = nn.Linear(128, 128)
-        self.v = nn.Linear(128, 1)
+        self.v = nn.Linear(128, 1, bias=True)
+
+        # Optimistic initialization
+        if optimistic_init > 0:
+            nn.init.constant_(self.v.bias, optimistic_init)
+
+        if layer_norm:
+            # Use GroupNorm for conv layers (works with any spatial dimensions)
+            # num_groups=1 is equivalent to LayerNorm for conv layers
+            self.ln_conv1 = nn.GroupNorm(1, 16)
+            self.ln_conv2 = nn.GroupNorm(1, 32)
+            self.ln_fc1 = nn.LayerNorm(128)
+            self.ln_fc2 = nn.LayerNorm(128)
+        else:
+            self.ln_conv1 = nn.Identity()
+            self.ln_conv2 = nn.Identity()
+            self.ln_fc1 = nn.Identity()
+            self.ln_fc2 = nn.Identity()
 
     def forward(self, x):
         x = torch.relu(self.conv1(x))
+        x = self.ln_conv1(x)
         x = torch.relu(self.conv2(x))
+        x = self.ln_conv2(x)
         x = x.view(x.size(0), -1)  # Flatten
         x = torch.relu(self.fc1(x))
+        x = self.ln_fc1(x)
         x = torch.relu(self.fc2(x))
+        x = self.ln_fc2(x)
         logits = self.pi(torch.relu(self.pi_fc(x)))
         value = self.v(torch.relu(self.v_fc(x))).squeeze(-1)
         return logits, value
@@ -59,20 +80,34 @@ class ConvActorCritic(BaseActorCritic):
 
 class FFActorCritic(BaseActorCritic):
 
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, layer_norm=False, optimistic_init=0.0):
         super().__init__()
         hid = 64
         self.fc = nn.Sequential(
             nn.Linear(input_dim, hid),
             nn.ReLU(),
+            nn.Linear(hid, hid),
+            nn.ReLU(),
         )
+        self.pi_fc = nn.Linear(hid, hid)
         self.pi = nn.Linear(hid, output_dim)
-        self.v = nn.Linear(hid, 1)
+        self.v_fc = nn.Linear(hid, hid)
+        self.v = nn.Linear(hid, 1, bias=True)
+        
+        # Optimistic initialization
+        if optimistic_init > 0:
+            nn.init.constant_(self.v.bias, optimistic_init)
+
+        if layer_norm:
+            self.ln_fc = nn.LayerNorm(hid)
+        else:
+            self.ln_fc = nn.Identity()
 
     def forward(self, x):
         x = self.fc(x)
-        logits = self.pi(x)
-        value = self.v(x).squeeze(-1)
+        x = self.ln_fc(x)
+        logits = self.pi(torch.relu(self.pi_fc(x)))
+        value = self.v(torch.relu(self.v_fc(x))).squeeze(-1)
         return logits, value
 
 
@@ -163,16 +198,18 @@ class PPO(base.BaseModel):
         max_grad_norm: float,
         convolutional: bool = False,
         weight_decay: float = 0.0,
+        layer_norm: bool = False,
+        optimistic_init: float = 0.0,
     ):
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         if convolutional:
-            net = ConvActorCritic(output_dim=num_actions)
+            net = ConvActorCritic(output_dim=num_actions, layer_norm=layer_norm, optimistic_init=optimistic_init)
             self._state_shape = sample_state.shape[1:]  # cut batch dimension
         else:
             net = FFActorCritic(
-                input_dim=len(sample_state.flatten()), output_dim=num_actions
+                input_dim=len(sample_state.flatten()), output_dim=num_actions, layer_norm=layer_norm, optimistic_init=optimistic_init
             )
             self._state_shape = (len(sample_state.flatten()),)
 
@@ -281,6 +318,8 @@ class PPO(base.BaseModel):
             "policy_loss": np.mean(policy_losses),
             "value_loss": np.mean(value_losses),
             "entropy": np.mean(entropies),
+            "values_std": values_pred.std(dim=0).mean().item(),
+            "logits_mean_std": logits.std(dim=0).mean().item(),
         }
 
     def save_model(self, path: str, step: int) -> None:

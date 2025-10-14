@@ -39,6 +39,12 @@ parser.add_argument(
     help="Weight decay (L2 regularization) for the model.",
 )
 parser.add_argument(
+    "-ln",
+    "--layer_norm",
+    action="store_true",
+    help="Use layer normalization in the model.",
+)
+parser.add_argument(
     "-gamma",
     "--discount_factor",
     type=float,
@@ -286,6 +292,8 @@ def setup_model(
             max_grad_norm=args.max_grad_norm,
             convolutional=args.convolutional,
             weight_decay=args.weight_decay,
+            layer_norm=args.layer_norm,
+            optimistic_init=args.optimistic_init,
         )
     elif model_type == "dqn":
         sample_state = env.reset_environment()
