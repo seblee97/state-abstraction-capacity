@@ -32,6 +32,19 @@ parser.add_argument(
     help="Learning rate for the model.",
 )
 parser.add_argument(
+    "-wd",
+    "--weight_decay",
+    type=float,
+    default=0.0,
+    help="Weight decay (L2 regularization) for the model.",
+)
+parser.add_argument(
+    "-ln",
+    "--layer_norm",
+    action="store_true",
+    help="Use layer normalization in the model.",
+)
+parser.add_argument(
     "-gamma",
     "--discount_factor",
     type=float,
@@ -298,6 +311,9 @@ def setup_model(
             max_grad_norm=args.max_grad_norm,
             target_kl=args.target_kl,
             convolutional=args.convolutional,
+            weight_decay=args.weight_decay,
+            layer_norm=args.layer_norm,
+            optimistic_init=args.optimistic_init,
         )
     elif model_type == "dqn":
         sample_state = env.reset_environment()
@@ -314,7 +330,8 @@ def setup_model(
             replay_buffer_size=args.replay_buffer_size,
             burnin=args.burnin,
             convolutional=args.convolutional,
-            optimistic_init=args.optimistic_init
+            optimistic_init=args.optimistic_init,
+            weight_decay=args.weight_decay,
         )
     elif model_type == "a2c":
         sample_state = env.reset_environment()
@@ -327,6 +344,7 @@ def setup_model(
             convolutional=args.convolutional,
             value_loss_coef=args.value_function_coef,
             entropy_coef=args.entropy_coef,
+            weight_decay=args.weight_decay,
         )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
