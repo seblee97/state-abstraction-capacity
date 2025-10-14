@@ -88,11 +88,17 @@ class RolloutBuffer:
     def push(self, state, action, reward, active, logp, value):
         if len(self.buffer) < self.size:
             self.buffer.append(None)
-        self.buffer[self.position] = (state, action, reward, active, logp, value)
 
-        self.position += 1
         if self.position >= self.size:
             self.full = True
+            self.position = self.size  # clamp
+            raise RuntimeError("RolloutBuffer overflow: push() called after buffer full; call reset() first.")
+        
+        self.buffer[self.position] = (state, action, reward, bool(active), float(logp), float(value))
+        self.position += 1
+        
+        # if self.position >= self.size:
+        #     self.full = True
 
     def reset(self):
         self.buffer.clear()
