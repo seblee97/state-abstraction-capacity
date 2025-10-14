@@ -1,5 +1,6 @@
 from sac.models import q_learning, ppo, dqn, a2c
 from sac.trainers import episodic_trainer, ppo_trainer
+from sac import utils
 from key_door import key_door_env, visualisation_env
 import argparse
 import numpy as np
@@ -21,7 +22,7 @@ parser.add_argument(
     "--model",
     type=str,
     default="q_learning",
-    choices=["q_learning", "ppo", "dqn", "a2c"],
+    choices=["q_learning", "quotient_q_learning", "ppo", "dqn", "a2c"],
     help="Model to use for training.",
 )
 parser.add_argument(
@@ -266,16 +267,34 @@ def setup_environment(
     return train_env, test_env
 
 
-def setup_model(
-    model_type: str,
-    env
-):
-    state_space = env.state_space
+def setup_model(model_type: str, env):
+    state_space = env.positional_state_space
     action_space = env.action_space
     if model_type == "q_learning":
         return q_learning.QLearning(
             state_space=state_space,
             action_space=action_space,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            exploration_rate=args.exploration_rate,
+            exploration_decay=args.exploration_decay,
+        )
+    elif model_type == "quotient_q_learning":
+        P, R = utils.prepare_abstraction(env._env)
+        (
+            state_blocks,
+            _,
+            state_label,
+            sa_label,
+            _,
+            _,
+            action_index_per_block,
+        ) = utils.joint_state_action_abstraction(P, R)
+        return q_learning.QuotientQLearning(
+            state_blocks=state_blocks,
+            state_label=state_label,
+            sa_label=sa_label,
+            action_index_per_block=action_index_per_block,
             learning_rate=args.learning_rate,
             discount_factor=args.discount_factor,
             exploration_rate=args.exploration_rate,
@@ -314,7 +333,7 @@ def setup_model(
             replay_buffer_size=args.replay_buffer_size,
             burnin=args.burnin,
             convolutional=args.convolutional,
-            optimistic_init=args.optimistic_init
+            optimistic_init=args.optimistic_init,
         )
     elif model_type == "a2c":
         sample_state = env.reset_environment()
