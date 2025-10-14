@@ -93,6 +93,7 @@ class A2C(base.BaseModel):
         entropy_coef: float = 0.01,
         max_grad_norm: float = 0.5,
         convolutional: bool = False,
+        weight_decay: float = 0.0,
     ):
         """
         Initialize A2C model
@@ -106,6 +107,7 @@ class A2C(base.BaseModel):
             entropy_coef: Coefficient for entropy bonus (encourages exploration)
             max_grad_norm: Maximum gradient norm for clipping
             convolutional: Whether to use convolutional architecture
+            weight_decay: Weight decay (L2 regularization) factor
         """
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
@@ -122,9 +124,9 @@ class A2C(base.BaseModel):
         self._value_loss_coef = value_loss_coef
         self._entropy_coef = entropy_coef
         self._max_grad_norm = max_grad_norm
-        
-        self._optimizer = optim.AdamW(self._net.parameters(), lr=learning_rate)
-        
+
+        self._optimizer = optim.AdamW(self._net.parameters(), lr=learning_rate, weight_decay=weight_decay)
+
         # Buffers for storing trajectory data
         self._states = []
         self._actions = []
@@ -151,9 +153,9 @@ class A2C(base.BaseModel):
         return action.item()
     
     def select_greedy_action(self, state):
+        """Select action greedily (deterministic, for testing)"""
         if isinstance(state, tuple):
             state = torch.tensor(state, dtype=torch.float32)
-        """Select action greedily (deterministic, for testing)"""
         shape = (1,) + self._state_shape
         state_tensor = torch.FloatTensor(state.reshape(shape)).to(self._device)
         
