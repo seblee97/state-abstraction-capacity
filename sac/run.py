@@ -29,7 +29,7 @@ parser.add_argument(
     "-lr",
     "--learning_rate",
     type=float,
-    default=0.001,
+    default=0.01,
     help="Learning rate for the model.",
 )
 parser.add_argument(
@@ -71,11 +71,11 @@ parser.add_argument(
     "-ns",
     "--num_steps",
     type=int,
-    default=100000,
+    default=1000000,
     help="Number of training steps.",
 )
 parser.add_argument(
-    "-bs", "--batch_size", type=int, default=64, help="Batch size for training."
+    "-bs", "--batch_size", type=int, default=256, help="Batch size for training."
 )
 parser.add_argument(
     "-tuf",
@@ -88,7 +88,7 @@ parser.add_argument(
     "-rbs",
     "--replay_buffer_size",
     type=int,
-    default=10000,
+    default=1024,
     help="Size of the replay buffer (for DQN). Also acts as rollout size for PPO.",
 )
 parser.add_argument(
@@ -102,7 +102,7 @@ parser.add_argument(
     "-gae",
     "--gae_lambda",
     type=float,
-    default=0.95,
+    default=0.98,
     help="GAE lambda parameter (for PPO).",
 )
 parser.add_argument(
@@ -116,7 +116,7 @@ parser.add_argument(
     "-ue",
     "--update_epochs",
     type=int,
-    default=10,
+    default=4,
     help="Number of epochs to update the policy (for PPO).",
 )
 parser.add_argument(
@@ -130,7 +130,7 @@ parser.add_argument(
     "-ec",
     "--entropy_coef",
     type=float,
-    default=0.01,
+    default=0.02,
     help="Coefficient for entropy bonus (for PPO and A2C).",
 )
 parser.add_argument(
@@ -171,28 +171,28 @@ parser.add_argument(
     "-viz",
     "--visualisation_frequency",
     type=int,
-    default=5,
+    default=10,
     help="Frequency of visualising (episode rollouts, value functions etc.) during training.",
 )
 parser.add_argument(
     "-map",
     "--map_name",
     type=str,
-    default="map.txt",
+    default="meister_trimmed.txt",
     help="Name of map file in maps folder.",
 )
 parser.add_argument(
     "-map_yaml",
     "--map_yaml_filename",
     type=str,
-    default="map.yaml",
+    default="meister_trimmed.yaml",
     help="Name of map YAML file for training in maps folder.",
 )
 parser.add_argument(
     "-test_map_yaml",
     "--test_map_yaml_filename",
     type=str,
-    default="test_map.yaml",
+    default="test_meister_trimmed.yaml",
     help="Name of map YAML file for test in maps folder.",
 )
 parser.add_argument(
@@ -207,7 +207,7 @@ parser.add_argument(
     "-timeout",
     "--episode_timeout",
     type=int,
-    default=200,
+    default=500,
     help="Episode timeout in steps.",
 )
 parser.add_argument(
