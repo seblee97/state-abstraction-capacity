@@ -1,11 +1,13 @@
-from sac.models import q_learning, ppo, dqn, a2c
+from sac.models import q_learning, quotient_q_learning, ppo, dqn, a2c
 from sac.trainers import episodic_trainer, ppo_trainer
 from sac import utils
 from key_door import key_door_env, visualisation_env
 import argparse
 import numpy as np
+import torch
 import os
 from datetime import datetime
+import random
 
 
 # Get the directory of the current script
@@ -16,6 +18,13 @@ parser = argparse.ArgumentParser()
 
 parser = argparse.ArgumentParser(
     description="Train RL models on the Key-Door environment."
+)
+parser.add_argument(
+    "-seed",
+    "--random_seed",
+    type=int,
+    default=42,
+    help="Random seed for reproducibility.",
 )
 parser.add_argument(
     "-m",
@@ -303,7 +312,8 @@ def setup_model(model_type: str, env):
             _,
             action_index_per_block,
         ) = utils.joint_state_action_abstraction(P, R)
-        return q_learning.QuotientQLearning(
+        return quotient_q_learning.QuotientQLearning(
+            state_space=state_space,
             state_blocks=state_blocks,
             state_label=state_label,
             sa_label=sa_label,
@@ -371,6 +381,14 @@ def setup_model(model_type: str, env):
 
 if __name__ == "__main__":
     args = parser.parse_args()
+
+    # set random seed
+    np.random.seed(args.random_seed)
+    torch.manual_seed(args.random_seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.random_seed)
+    random.seed(args.random_seed)
+
     if args.absolute_results_dir is not None:
         experiment_dir = args.absolute_results_dir
         organise_absolute_experiment_directory(experiment_dir)
@@ -399,7 +417,7 @@ if __name__ == "__main__":
         env=train_env,
     )
 
-    if args.model in ["q_learning", "a2c", "dqn"]:
+    if args.model in ["q_learning", "quotient_q_learning", "a2c", "dqn"]:
         episodic_trainer.train(
             model=model,
             train_env=train_env,
