@@ -4,3 +4,10 @@ src/
 *ipynb_checkpoints
 *.DS_Store
 sac/results/
+sac/hp_opt_runs/
+sac/invisible_reward_runs/
+sac/custom_env_runs/
+*.pth
+*.pt
+*.npz
+*.mp4
