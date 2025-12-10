@@ -4,6 +4,8 @@ key_positions: []
 
 door_positions: []
 
+terminal_position: [39, 5]
+
 reward_positions:
     - [39, 5]
 
