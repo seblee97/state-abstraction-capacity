@@ -1,5 +1,6 @@
 import numpy as np
 from collections import defaultdict
+import heapq
 
 
 def deterministic_bisimulation(P, R, *, atol=0.0):
@@ -253,6 +254,77 @@ def joint_state_action_abstraction(P, R, *, atol=0.0):
             P_tilde, R_tilde, action_index_per_block)
 
 
+def _deterministic_next(P, atol=1e-12):
+    """return next[s,a] = s' (int) if deterministic, else -1."""
+    S, A, S2 = P.shape
+    assert S == S2
+    nxt = -np.ones((S, A), dtype=int)
+    for s in range(S):
+        for a in range(A):
+            idx = np.flatnonzero(P[s, a] > 1 - atol)
+            if len(idx) == 1 and np.allclose(P[s, a, idx[0]], 1.0, atol=atol):
+                nxt[s, a] = int(idx[0])
+            else:
+                # allow explicit terminals to be self-loops w/ prob 1
+                if np.allclose(P[s, a].sum(), 0.0, atol=atol):
+                    nxt[s, a] = -1  # no transition defined
+                else:
+                    raise ValueError(f"(s={s},a={a}) not deterministic (got probs {P[s,a]})")
+    return nxt
+
+def dijkstra_policy(P, C, goal_mask, atol=1e-12):
+    """
+    deterministic, nonnegative costs. compute optimal J* and greedy policy for all states.
+
+    Args
+    ----
+    P : (S,A,S) transition probs, deterministic (0/1)
+    C : (S,A) nonnegative costs
+    goal_mask : (S,) bool, True for goal/terminal states (episode ends upon entry)
+
+    Returns
+    -------
+    J : (S,) optimal cost-to-go (inf if goal unreachable)
+    pi : (S,) int optimal action per state (-1 if terminal or no feasible action)
+    """
+    S, A, S2 = P.shape
+    assert C.shape == (S, A)
+    assert S == S2
+    nxt = _deterministic_next(P, atol=atol)
+
+    # build reverse graph: edges sp -> s with cost c(s,a) whenever nxt[s,a]=sp
+    rev_adj = [[] for _ in range(S)]
+    for s in range(S):
+        for a in range(A):
+            sp = nxt[s, a]
+            if sp >= 0:
+                rev_adj[sp].append((s, a, C[s, a]))
+
+    # multi-source dijkstra from all goals on the reverse graph
+    J = np.full(S, np.inf, dtype=float)
+    pi = -np.ones(S, dtype=int)
+    pq = []
+
+    # by convention, J(goal)=0 and no action needed there
+    for g in np.flatnonzero(goal_mask):
+        J[g] = 0.0
+        heapq.heappush(pq, (0.0, g))
+
+    while pq:
+        dist_u, u = heapq.heappop(pq)
+        if dist_u > J[u]:
+            continue
+        # relax predecessors (s --a,c--> u)
+        for s, a, c in rev_adj[u]:
+            new_cost = c + J[u]
+            if new_cost < J[s]:
+                J[s] = new_cost
+                pi[s] = a               # best action so far from s
+                heapq.heappush(pq, (new_cost, s))
+
+    # terminal states: keep pi=-1
+    pi[goal_mask] = -1
+    return J, pi
 
 # --------------------------
 # Minimal example & sanity check

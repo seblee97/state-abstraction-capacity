@@ -11,3 +11,7 @@ sac/custom_env_runs/
 *.pt
 *.npz
 *.mp4
+notebooks/logs/
+notebooks/q_learning_and_quotients/
+notebooks/*.pdf
+notebooks/*.png

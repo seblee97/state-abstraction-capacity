@@ -258,7 +258,7 @@ def generate_fractal_maze(depth=6, maze_size=45):
     
     return maze_str, start_pos, reward_pos
 
-def generate_maze_from_mdp(tree_depth, P, R):
+def generate_maze_from_mdp(tree_depth, P, R, maze_size=45):
     """
     Generate maze from MDP definition.
     
@@ -280,7 +280,7 @@ def generate_maze_from_mdp(tree_depth, P, R):
     reward_pos : tuple
         (y, x) coordinates of the reward position 'R'
     """
-    return generate_fractal_maze(tree_depth)
+    return generate_fractal_maze(tree_depth, maze_size)
 
 
 # Example usage
