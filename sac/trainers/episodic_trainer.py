@@ -3,6 +3,8 @@ import numpy as np
 
 from tqdm import tqdm
 
+from sac import utils
+
 
 def train(
     model,
@@ -35,11 +37,13 @@ def train(
         episode_reward = 0
         episode_loss = 0
 
-        state = train_env.reset_environment()
+        state_ = train_env.reset_environment()
+        state = state_[:2]
 
         for step in range(episode_timeout):
             action = model.select_action(state)
-            reward, next_state = train_env.step(action)
+            reward, next_state_ = train_env.step(action)
+            next_state = next_state_[:2]
 
             info = model.step(
                 state=state,
@@ -65,11 +69,15 @@ def train(
             latest_test_reward = test_reward
         if i % visualisation_frequency == 0:
             train_env.visualise_episode_history(
-                save_path=os.path.join(experiment_dir, "rollouts", f"train_episode_{i}.mp4"),
+                save_path=os.path.join(
+                    experiment_dir, "rollouts", f"train_episode_{i}.mp4"
+                ),
                 history="train",
             )
             test_env.visualise_episode_history(
-                save_path=os.path.join(experiment_dir, "rollouts", f"test_episode_{i}.mp4"),
+                save_path=os.path.join(
+                    experiment_dir, "rollouts", f"test_episode_{i}.mp4"
+                ),
                 history="test",
             )
         if i % save_model_frequency == 0:
@@ -88,7 +96,7 @@ def train(
             desc_parts.append(f"Train Loss: {latest_train_loss:.6f}")
         if episode_reward is not None:
             desc_parts.append(f"Episode Reward: {episode_reward:.2f}")
-        
+
         if desc_parts:
             pbar.set_description(" | ".join(desc_parts))
 
@@ -103,12 +111,14 @@ def train(
 
 
 def test(model, env, episode_timeout):
-    state = env.reset_environment(train=False)
+    state_ = env.reset_environment(train=False)
+    state = state_[:2]
     total_reward = 0
     episode_length = 0
     for step in range(episode_timeout):
         action = model.select_greedy_action(state)
-        reward, next_state = env.step(action)
+        reward, next_state_ = env.step(action)
+        next_state = next_state_[:2]
         total_reward += reward
         episode_length += 1
         state = next_state

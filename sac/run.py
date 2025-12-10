@@ -1,10 +1,13 @@
-from sac.models import q_learning, ppo, dqn, a2c
+from sac.models import q_learning, quotient_q_learning, ppo, dqn, a2c
 from sac.trainers import episodic_trainer, ppo_trainer
+from sac import utils
 from key_door import key_door_env, visualisation_env
 import argparse
 import numpy as np
+import torch
 import os
 from datetime import datetime
+import random
 
 
 # Get the directory of the current script
@@ -17,18 +20,25 @@ parser = argparse.ArgumentParser(
     description="Train RL models on the Key-Door environment."
 )
 parser.add_argument(
+    "-seed",
+    "--random_seed",
+    type=int,
+    default=42,
+    help="Random seed for reproducibility.",
+)
+parser.add_argument(
     "-m",
     "--model",
     type=str,
     default="q_learning",
-    choices=["q_learning", "ppo", "dqn", "a2c"],
+    choices=["q_learning", "quotient_q_learning", "ppo", "dqn", "a2c"],
     help="Model to use for training.",
 )
 parser.add_argument(
     "-lr",
     "--learning_rate",
     type=float,
-    default=0.001,
+    default=0.01,
     help="Learning rate for the model.",
 )
 parser.add_argument(
@@ -83,11 +93,11 @@ parser.add_argument(
     "-ns",
     "--num_steps",
     type=int,
-    default=100000,
+    default=1000000,
     help="Number of training steps.",
 )
 parser.add_argument(
-    "-bs", "--batch_size", type=int, default=64, help="Batch size for training."
+    "-bs", "--batch_size", type=int, default=256, help="Batch size for training."
 )
 parser.add_argument(
     "-tuf",
@@ -100,7 +110,7 @@ parser.add_argument(
     "-rbs",
     "--replay_buffer_size",
     type=int,
-    default=10000,
+    default=1024,
     help="Size of the replay buffer (for DQN). Also acts as rollout size for PPO.",
 )
 parser.add_argument(
@@ -114,14 +124,21 @@ parser.add_argument(
     "-gae",
     "--gae_lambda",
     type=float,
-    default=0.95,
+    default=0.98,
     help="GAE lambda parameter (for PPO).",
+)
+parser.add_argument(
+    "-kl",
+    "--target_kl",
+    type=float,
+    default=0.03,
+    help="Target KL divergence for early stopping (for PPO).",
 )
 parser.add_argument(
     "-ue",
     "--update_epochs",
     type=int,
-    default=10,
+    default=4,
     help="Number of epochs to update the policy (for PPO).",
 )
 parser.add_argument(
@@ -135,7 +152,7 @@ parser.add_argument(
     "-ec",
     "--entropy_coef",
     type=float,
-    default=0.01,
+    default=0.02,
     help="Coefficient for entropy bonus (for PPO and A2C).",
 )
 parser.add_argument(
@@ -176,28 +193,28 @@ parser.add_argument(
     "-viz",
     "--visualisation_frequency",
     type=int,
-    default=5,
+    default=10,
     help="Frequency of visualising (episode rollouts, value functions etc.) during training.",
 )
 parser.add_argument(
     "-map",
     "--map_name",
     type=str,
-    default="map.txt",
+    default="meister_trimmed.txt",
     help="Name of map file in maps folder.",
 )
 parser.add_argument(
     "-map_yaml",
     "--map_yaml_filename",
     type=str,
-    default="map.yaml",
+    default="meister_trimmed.yaml",
     help="Name of map YAML file for training in maps folder.",
 )
 parser.add_argument(
     "-test_map_yaml",
     "--test_map_yaml_filename",
     type=str,
-    default="test_map.yaml",
+    default="test_meister_trimmed.yaml",
     help="Name of map YAML file for test in maps folder.",
 )
 parser.add_argument(
@@ -212,7 +229,7 @@ parser.add_argument(
     "-timeout",
     "--episode_timeout",
     type=int,
-    default=200,
+    default=500,
     help="Episode timeout in steps.",
 )
 parser.add_argument(
@@ -222,6 +239,18 @@ parser.add_argument(
     default="results",
     help="Directory to save results.",
 )
+parser.add_argument(
+    "-abs_results",
+    "--absolute_results_dir",
+    type=str,
+    default=None,
+    help="Directory to save results (absolute path, overwrites relative).",
+)
+
+
+def organise_absolute_experiment_directory(dir: str) -> str:
+    viz_dir = os.path.join(dir, "rollouts")
+    os.makedirs(viz_dir, exist_ok=True)
 
 
 def create_experiment_directory(base_dir: str) -> str:
@@ -260,16 +289,35 @@ def setup_environment(
     return train_env, test_env
 
 
-def setup_model(
-    model_type: str,
-    env
-):
-    state_space = env.state_space
+def setup_model(model_type: str, env):
+    state_space = env.positional_state_space
     action_space = env.action_space
     if model_type == "q_learning":
         return q_learning.QLearning(
             state_space=state_space,
             action_space=action_space,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            exploration_rate=args.exploration_rate,
+            exploration_decay=args.exploration_decay,
+        )
+    elif model_type == "quotient_q_learning":
+        P, R = utils.prepare_abstraction(env._env)
+        (
+            state_blocks,
+            _,
+            state_label,
+            sa_label,
+            _,
+            _,
+            action_index_per_block,
+        ) = utils.joint_state_action_abstraction(P, R)
+        return quotient_q_learning.QuotientQLearning(
+            state_space=state_space,
+            state_blocks=state_blocks,
+            state_label=state_label,
+            sa_label=sa_label,
+            action_index_per_block=action_index_per_block,
             learning_rate=args.learning_rate,
             discount_factor=args.discount_factor,
             exploration_rate=args.exploration_rate,
@@ -290,6 +338,7 @@ def setup_model(
             vf_coef=args.value_function_coef,
             ent_coef=args.entropy_coef,
             max_grad_norm=args.max_grad_norm,
+            target_kl=args.target_kl,
             convolutional=args.convolutional,
             weight_decay=args.weight_decay,
             layer_norm=args.layer_norm,
@@ -332,9 +381,21 @@ def setup_model(
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    experiment_dir = create_experiment_directory(
-        base_dir=os.path.join(current_dir, args.results_dir)
-    )
+
+    # set random seed
+    np.random.seed(args.random_seed)
+    torch.manual_seed(args.random_seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.random_seed)
+    random.seed(args.random_seed)
+
+    if args.absolute_results_dir is not None:
+        experiment_dir = args.absolute_results_dir
+        organise_absolute_experiment_directory(experiment_dir)
+    else:
+        experiment_dir = create_experiment_directory(
+            base_dir=os.path.join(current_dir, args.results_dir)
+        )
 
     # save args to experiment_dir
     with open(os.path.join(experiment_dir, "args.txt"), "w") as f:
@@ -356,7 +417,7 @@ if __name__ == "__main__":
         env=train_env,
     )
 
-    if args.model in ["q_learning", "a2c", "dqn"]:
+    if args.model in ["q_learning", "quotient_q_learning", "a2c", "dqn"]:
         episodic_trainer.train(
             model=model,
             train_env=train_env,
