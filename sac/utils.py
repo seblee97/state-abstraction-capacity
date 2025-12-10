@@ -328,7 +328,7 @@ def build_quotient_Q_struct(
             for s, a in inv[cls]:
                 rep_action[(s, i)] = a
 
-    def to_base_action(b, i, s):
+    def to_base_action(i, s):
         # s must belong to block b
         return rep_action[(s, i)]
 
