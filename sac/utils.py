@@ -33,36 +33,6 @@ def prepare_abstraction(env):
     return P, R
 
 
-def prepare_abstraction(env):
-    S = len(env.state_space)
-    A = len(env.action_space)
-
-    P = np.zeros((S, A, S))
-    R = np.zeros((S, A))
-
-    state_id_mapping = {state: i for i, state in enumerate(env.state_space)}
-
-    reward_positions = list(env._rewards.keys())
-
-    for state in env.state_space:
-        state_index = state_id_mapping[state]
-        if state not in reward_positions:
-            for action in env.action_space:
-                # set env and transition
-                env.reset_environment(train=True)
-                env.move_agent_to(state)
-                reward, new_state = env.step(action)
-                if reward > 0:
-                    print(
-                        f"From state {state} taking action {action} to state {new_state} with reward {reward}"
-                    )
-                new_state_index = state_id_mapping[new_state[:2]]
-                P[state_index][action][new_state_index] = 1
-                R[state_index][action] = reward
-
-    return P, R
-
-
 def deterministic_bisimulation(P, R, *, atol=0.0):
     """
     Compute the coarsest bisimulation partition for a finite MDP.
