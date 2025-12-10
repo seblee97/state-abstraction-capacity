@@ -4,15 +4,17 @@ key_positions: []
 
 door_positions: []
 
+terminal_position: [19, 19]
+
 # shaping rewards placed along optimal path
 reward_positions:
-    - [39, 5]
+    - [19, 19]
     - [22, 22]
     - [22, 12]
-    - [32, 12]
-    - [32, 7]
-    - [37, 7]
-    - [37, 5]
+    - [12, 12]
+    - [12, 17]
+    - [17, 17]
+    - [17, 19]
 
 # provide either one set of statistics (used for all rewards)
 # or one set of statistics for each reward
@@ -24,17 +26,17 @@ reward_statistics:
         mean: 0.01
         variance: 0.001
     - gaussian:
-        mean: 0.01
+        mean: 0.02
         variance: 0.001
     - gaussian:
-        mean: 0.01
+        mean: 0.04
         variance: 0.001
     - gaussian:
-        mean: 0.01
+        mean: 0.08
         variance: 0.001
     - gaussian:
-        mean: 0.01
+        mean: 0.16
         variance: 0.001
     - gaussian:
-        mean: 0.01
+        mean: 0.32
         variance: 0.001
