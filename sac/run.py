@@ -1,4 +1,4 @@
-from sac.models import q_learning, quotient_q_learning, ppo, dqn, a2c
+from sac.models import q_learning, quotient_q_learning, ppo, dqn, a2c, dsr, qrdqn
 from sac.trainers import episodic_trainer, ppo_trainer
 from sac import utils
 from key_door import key_door_env, visualisation_env
@@ -31,7 +31,7 @@ parser.add_argument(
     "--model",
     type=str,
     default="q_learning",
-    choices=["q_learning", "quotient_q_learning", "ppo", "dqn", "a2c"],
+    choices=["q_learning", "quotient_q_learning", "ppo", "dqn", "a2c", "dsr", "qrdqn"],
     help="Model to use for training.",
 )
 parser.add_argument(
@@ -97,7 +97,7 @@ parser.add_argument(
     help="Number of training steps.",
 )
 parser.add_argument(
-    "-bs", "--batch_size", type=int, default=256, help="Batch size for training."
+    "-bs", "--batch_size", type=int, default=128, help="Batch size for training."
 )
 parser.add_argument(
     "-tuf",
@@ -214,14 +214,14 @@ parser.add_argument(
     "-test_map_yaml",
     "--test_map_yaml_filename",
     type=str,
-    default="test_meister_trimmed.yaml",
+    default="meister_trimmed.yaml",
     help="Name of map YAML file for test in maps folder.",
 )
 parser.add_argument(
     "-rep",
     "--representation",
     type=str,
-    default="agent_position",
+    default="pixel",
     choices=["agent_position", "pixel"],
     help="State representation to use.",
 )
@@ -229,7 +229,7 @@ parser.add_argument(
     "-timeout",
     "--episode_timeout",
     type=int,
-    default=500,
+    default=200,
     help="Episode timeout in steps.",
 )
 parser.add_argument(
@@ -245,6 +245,47 @@ parser.add_argument(
     type=str,
     default=None,
     help="Directory to save results (absolute path, overwrites relative).",
+)
+parser.add_argument(
+    "-fd",
+    "--feature_dim",
+    type=int,
+    default=128,
+    help="Dimension of successor feature vectors (for DSR).",
+)
+parser.add_argument(
+    "-recon",
+    "--reconstruction",
+    action="store_true",
+    help="Enable reconstruction auxiliary loss (for DSR).",
+)
+parser.add_argument(
+    "-rc",
+    "--reconstruction_coef",
+    type=float,
+    default=0.1,
+    help="Coefficient for reconstruction loss (for DSR).",
+)
+parser.add_argument(
+    "-nq",
+    "--num_quantiles",
+    type=int,
+    default=200,
+    help="Number of quantiles for QRDQN.",
+)
+parser.add_argument(
+    "-kappa",
+    "--kappa",
+    type=float,
+    default=1.0,
+    help="Kappa parameter for Huber loss in QRDQN.",
+)
+parser.add_argument(
+    "-qr_clip",
+    "--qrdqn_grad_clip",
+    type=float,
+    default=None,
+    help="Gradient clipping norm for QRDQN (None for no clipping).",
 )
 
 
@@ -375,6 +416,48 @@ def setup_model(model_type: str, env):
             entropy_coef=args.entropy_coef,
             weight_decay=args.weight_decay,
         )
+    elif model_type == "dsr":
+        sample_state = env.reset_environment()
+        num_actions = len(action_space)
+        return dsr.DSR(
+            sample_state=sample_state,
+            num_actions=num_actions,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            exploration_rate=args.exploration_rate,
+            exploration_decay=args.exploration_decay,
+            batch_size=args.batch_size,
+            target_update_frequency=args.target_update_frequency,
+            replay_buffer_size=args.replay_buffer_size,
+            burnin=args.burnin,
+            feature_dim=args.feature_dim,
+            reconstruction=args.reconstruction,
+            reconstruction_coef=args.reconstruction_coef,
+            convolutional=args.convolutional,
+            optimistic_init=args.optimistic_init,
+            weight_decay=args.weight_decay,
+        )
+    elif model_type == "qrdqn":
+        sample_state = env.reset_environment()
+        num_actions = len(action_space)
+        return qrdqn.QRDQN(
+            sample_state=sample_state,
+            num_actions=num_actions,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            exploration_rate=args.exploration_rate,
+            exploration_decay=args.exploration_decay,
+            batch_size=args.batch_size,
+            target_update_frequency=args.target_update_frequency,
+            replay_buffer_size=args.replay_buffer_size,
+            burnin=args.burnin,
+            num_quantiles=args.num_quantiles,
+            kappa=args.kappa,
+            convolutional=args.convolutional,
+            optimistic_init=args.optimistic_init,
+            weight_decay=args.weight_decay,
+            max_grad_norm=args.qrdqn_grad_clip,
+        )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -417,7 +500,14 @@ if __name__ == "__main__":
         env=train_env,
     )
 
-    if args.model in ["q_learning", "quotient_q_learning", "a2c", "dqn"]:
+    if args.model in [
+        "q_learning",
+        "quotient_q_learning",
+        "a2c",
+        "dqn",
+        "dsr",
+        "qrdqn",
+    ]:
         episodic_trainer.train(
             model=model,
             train_env=train_env,
