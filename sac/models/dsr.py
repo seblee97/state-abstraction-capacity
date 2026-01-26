@@ -38,6 +38,7 @@ class ConvDSRNet(nn.Module):
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
         self.fc1 = nn.LazyLinear(128)
         self.fc2 = nn.Linear(128, feature_dim)
+        self.feature_norm = nn.LayerNorm(feature_dim)
 
         # Successor features: one SR vector per action
         # Output shape: (batch, num_actions, feature_dim)
@@ -63,7 +64,8 @@ class ConvDSRNet(nn.Module):
         self._conv_shape = x.shape[1:]  # Save for decoder
         x = x.view(x.size(0), -1)  # Flatten
         x = torch.relu(self.fc1(x))
-        x = self.fc2(x)  # No activation on features
+        x = self.fc2(x)
+        x = self.feature_norm(x)  # Normalize features to prevent SR explosion
         return x
 
     def forward(self, x):
@@ -135,6 +137,7 @@ class FFDSRNet(nn.Module):
         self.fc1 = nn.Linear(input_dim, 128)
         self.fc2 = nn.Linear(128, 128)
         self.fc3 = nn.Linear(128, feature_dim)
+        self.feature_norm = nn.LayerNorm(feature_dim)
 
         # Successor features: one SR vector per action
         # Output shape: (batch, num_actions, feature_dim)
@@ -160,7 +163,8 @@ class FFDSRNet(nn.Module):
             x = torch.FloatTensor(x).to(next(self.parameters()).device)
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
-        x = self.fc3(x)  # No activation on features
+        x = self.fc3(x)
+        x = self.feature_norm(x)  # Normalize features to prevent SR explosion
         return x
 
     def forward(self, x):
@@ -267,6 +271,7 @@ class DSR(base.BaseModel):
             convolutional: bool = False,
             optimistic_init: float = 0.0,
             weight_decay: float = 0.0,
+            max_grad_norm: float = 10.0,
         ):
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -330,6 +335,7 @@ class DSR(base.BaseModel):
         self._target_update_frequency = target_update_frequency
         self._burnin = burnin
         self._step_count = 0
+        self._max_grad_norm = max_grad_norm
 
         super().__init__()
 
@@ -456,6 +462,8 @@ class DSR(base.BaseModel):
 
         self._optimizer.zero_grad()
         total_loss.backward()
+        if self._max_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self._net.parameters(), self._max_grad_norm)
         self._optimizer.step()
 
         self._step_count += 1
