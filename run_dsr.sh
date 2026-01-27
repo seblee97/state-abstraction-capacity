@@ -6,18 +6,20 @@ python sac/run.py -m dsr \
     -bs 64 \
     -gamma 0.99 \
     -eps 1.0 \
-    -eps_decay 0.995 \
-    -tuf 50 \
+    -eps_decay 0.99998 \
+    -recon \
+    -rc 0.1 \
+    -tuf 1000 \
     -rbs 50000 \
     -burnin 5000 \
-    -num_ep 10000 \
-    -timeout 500 \
+    -num_ep 1000 \
+    -timeout 50 \
     -fd 128 \
-    -opt 10.0 \
-    -mgn 10.0 \
+    -opt 0.0 \
+    -mgn 1.0 \
     -conv \
     -rep pixel \
-    -map meister_trimmed.txt \
-    -map_yaml meister_trimmed.yaml \
-    -test_map_yaml test_meister_trimmed.yaml \
+    -map map.txt \
+    -map_yaml test_map.yaml \
+    -test_map_yaml test_map.yaml \
     $@
