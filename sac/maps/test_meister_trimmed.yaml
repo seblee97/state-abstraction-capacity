@@ -12,4 +12,4 @@ reward_positions:
 reward_statistics:
     gaussian:
         mean: 1
-        variance: 0.1 # note this should actually be the standard deviation but wrong term was used in key-door env.
+        variance: 0.01 # note this should actually be the standard deviation but wrong term was used in key-door env.
