@@ -13,6 +13,8 @@ Usage:
 import random
 import json
 import csv
+import argparse
+import dataclasses
 from pathlib import Path
 from collections import deque
 from dataclasses import dataclass, asdict
@@ -40,7 +42,7 @@ class Config:
     layout_name: str = "meister.txt"
     max_steps_per_episode: int = 500
     step_reward: float = 0.0
-    collision_reward: float = -0.01
+    collision_reward: float = -0.1
     random_start: bool = True  # Random start position during training
 
     # Training
@@ -78,8 +80,8 @@ class Config:
     # Loss weights
     use_reconstruction: bool = True  # Whether to use reconstruction loss
     sr_loss_weight: float = 1.0
-    reward_loss_weight: float = 0.5
-    reconstruction_loss_weight: float = 0.5
+    reward_loss_weight: float = 1.0
+    reconstruction_loss_weight: float = 0.1
 
     # Target network
     target_update_freq: int = 1000  # steps
@@ -574,21 +576,35 @@ def save_video(
 
 
 def get_valid_positions(env) -> List[Tuple[int, int]]:
-    """Get all valid (non-wall) positions in the environment."""
+    """Get positions that are non-wall and have more than 2 non-wall neighbors."""
     valid = []
     layout = env._base_layout
     for row in range(layout.height):
         for col in range(layout.width):
             if not layout.is_wall(row, col):
-                valid.append((row, col))
+                # Count non-wall neighbors (up, down, left, right)
+                neighbors = [
+                    (row - 1, col),  # up
+                    (row + 1, col),  # down
+                    (row, col - 1),  # left
+                    (row, col + 1),  # right
+                ]
+                non_wall_neighbors = sum(
+                    1 for r, c in neighbors if not layout.is_wall(r, c)
+                )
+                if non_wall_neighbors > 2:
+                    valid.append((row, col))
     return valid
 
 
 def reset_with_random_start(env, valid_positions: List[Tuple[int, int]]) -> dict:
     """Reset environment and randomize agent start position."""
     obs, info = env.reset()
-    # Override agent position with random valid position
-    new_pos = random.choice(valid_positions)
+    # Include original start position in sampling pool
+    start_pos = env._base_layout.start_position
+    positions_to_sample = valid_positions + [start_pos]
+    # Override agent position with random position
+    new_pos = random.choice(positions_to_sample)
     env._agent_pos = new_pos
     # Rebuild observation with new position
     obs = env._get_observation()
@@ -915,6 +931,41 @@ def run_dsr_training(config: Config):
 # MAIN
 # =============================================================================
 
+def parse_args() -> Config:
+    """Build CLI parser from Config dataclass fields."""
+
+    parser = argparse.ArgumentParser(
+        description="Deep Successor Representation for GridWorld",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    for field in dataclasses.fields(Config):
+        name = field.name
+        ftype = field.type
+        default = field.default
+
+        if ftype == "bool" or ftype is bool:
+            # --flag / --no-flag
+            parser.add_argument(
+                f"--{name}", action="store_true", default=None,
+            )
+            parser.add_argument(
+                f"--no-{name}", dest=name, action="store_false",
+            )
+        else:
+            origin = getattr(ftype, "__origin__", None)
+            if isinstance(ftype, str):
+                # Resolve string annotations
+                ftype = eval(ftype)
+            parser.add_argument(f"--{name}", type=ftype, default=None)
+
+    args = parser.parse_args()
+
+    # Only pass explicitly provided values to Config
+    overrides = {k: v for k, v in vars(args).items() if v is not None}
+    return Config(**overrides)
+
+
 if __name__ == "__main__":
-    config = Config()
+    config = parse_args()
     agent, train_rewards, train_lengths, test_results = run_dsr_training(config)
