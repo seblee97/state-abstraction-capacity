@@ -44,7 +44,7 @@ class Config:
     random_start: bool = True  # Random start position during training
 
     # Training
-    n_episodes: int = 1000
+    n_episodes: int = 10000
     print_every: int = 1
     seed: int = 42  # Random seed for reproducibility (None for no seeding)
 
@@ -73,7 +73,7 @@ class Config:
     # Exploration (epsilon decays per episode)
     epsilon_start: float = 1.0
     epsilon_end: float = 0.1
-    epsilon_decay: float = 0.995  # per episode
+    epsilon_decay: float = 0.999  # per episode
 
     # Loss weights
     use_reconstruction: bool = True  # Whether to use reconstruction loss
@@ -86,6 +86,9 @@ class Config:
 
     # Replay buffer
     buffer_capacity: int = 100000
+
+    # Checkpointing
+    checkpoint_every: int = 100  # Save checkpoint every N episodes (0 to disable)
 
     # Device
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
@@ -424,6 +427,34 @@ class DSRAgent:
 
         return result
 
+    def save_checkpoint(self, filepath: Path, episode: int, total_steps: int):
+        """Save a checkpoint of the agent state."""
+        checkpoint = {
+            "episode": episode,
+            "total_steps": total_steps,
+            "network_state_dict": self.network.state_dict(),
+            "target_network_state_dict": self.target_network.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "epsilon": self.epsilon,
+            "update_count": self.update_count,
+            "config": asdict(self.config),
+        }
+        torch.save(checkpoint, filepath)
+
+    def load_checkpoint(self, filepath: Path) -> dict:
+        """Load a checkpoint and return metadata (episode, total_steps)."""
+        checkpoint = torch.load(filepath, map_location=self.device)
+        self.network.load_state_dict(checkpoint["network_state_dict"])
+        self.target_network.load_state_dict(checkpoint["target_network_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        self.epsilon = checkpoint["epsilon"]
+        self.update_count = checkpoint["update_count"]
+        self._initialized = True
+        return {
+            "episode": checkpoint["episode"],
+            "total_steps": checkpoint["total_steps"],
+        }
+
 
 # =============================================================================
 # VISUALIZATION
@@ -580,6 +611,10 @@ class Logger:
         # Create videos subdirectory
         self.video_dir = self.run_dir / "videos"
         self.video_dir.mkdir(exist_ok=True)
+
+        # Create checkpoints subdirectory
+        self.checkpoint_dir = self.run_dir / "checkpoints"
+        self.checkpoint_dir.mkdir(exist_ok=True)
 
         # Save config
         config_path = self.run_dir / "config.json"
@@ -845,8 +880,19 @@ def run_dsr_training(config: Config):
                 f"  TEST @ {episode+1}: R={mean_r:.2f}±{std_r:.2f}, L={mean_l:.1f}±{std_l:.1f}"
             )
 
+        # Save checkpoint periodically
+        if config.checkpoint_every > 0 and (episode + 1) % config.checkpoint_every == 0:
+            checkpoint_path = logger.checkpoint_dir / f"checkpoint_ep{episode+1:06d}.pt"
+            agent.save_checkpoint(checkpoint_path, episode + 1, total_steps)
+            print(f"  Checkpoint saved: {checkpoint_path}")
+
     env.close()
-    print("\nTraining complete!")
+
+    # Save final checkpoint
+    final_checkpoint_path = logger.checkpoint_dir / "checkpoint_final.pt"
+    agent.save_checkpoint(final_checkpoint_path, config.n_episodes, total_steps)
+    print(f"\nFinal checkpoint saved: {final_checkpoint_path}")
+    print("Training complete!")
 
     # Final evaluation
     print("\n" + "=" * 60)
