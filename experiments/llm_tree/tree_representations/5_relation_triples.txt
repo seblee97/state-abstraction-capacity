@@ -1,0 +1,42 @@
+TASK DESCRIPTION:
+You are an agent navigating a spatial maze with corridors and junctions. Your position is defined by the current node ID. At each step, you will be given a list of connected nodes that you can move to. You must respond with the node ID you want to move to next.
+Your goal is to traverse the maze efficiently to reach a target node ID.
+The maze has a fractal structure: corridors alternate between horizontal (East/West) and vertical (North/South) directions at each junction.
+Below is the representation of the maze.
+---------------------------------------------------
+
+GRAPH FORMAT: Spatial Relation Triples
+Explicit directional relations: North(from, to), South(from, to), East(from, to), West(from, to).
+Triples are listed in random order.
+
+North(7, 3)
+South(12, 13)
+South(7, 10)
+East(8, 6)
+North(5, 15)
+South(3, 7)
+South(9, 8)
+North(9, 14)
+North(10, 7)
+North(8, 9)
+North(11, 6)
+East(13, 8)
+West(14, 7)
+South(13, 1)
+North(15, 4)
+South(4, 15)
+West(15, 14)
+South(15, 5)
+North(6, 2)
+South(14, 9)
+West(8, 13)
+East(7, 14)
+North(1, 13)
+South(6, 11)
+East(14, 15)
+West(6, 8)
+South(2, 6)
+North(13, 12)
+
+Start Node: 9
+Target Node: 11

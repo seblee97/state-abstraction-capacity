@@ -15,3 +15,6 @@ notebooks/logs/
 notebooks/q_learning_and_quotients/
 notebooks/*.pdf
 notebooks/*.png
+results/
+experiments/llm_tree/evaluation_results/
+logs/

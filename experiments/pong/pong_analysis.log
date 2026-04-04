@@ -1,0 +1,295 @@
+Output directory: /mnt/home/msrinath/workspace/state-abstraction-capacity/results/pong_test
+
+Downloading models from HuggingFace...
+Downloading PPO model...
+PPO model downloaded successfully
+Attempting DQN download with multiple fallback strategies...
+  DQN file downloaded successfully
+  Strategy 1: Override replay buffer settings...
+DQN model downloaded successfully (strategy 1)
+Downloading A2C model...
+A2C model downloaded successfully
+Attempting QRDQN download...
+  Trying sb3/qrdqn-PongNoFrameskip-v4...
+  QRDQN file downloaded from sb3/qrdqn-PongNoFrameskip-v4
+    Strategy 1: Override replay buffer settings...
+QRDQN model downloaded successfully (strategy 1)
+Models downloaded successfully
+
+Initializing analyzer...
+Initializing evaluator...
+
+Analyzing models: ppo
+Number of states: 20
+Generate plots: True
+
+
+================================================================================
+Analyzing PPO model
+================================================================================
+
+Network type: policy, Architecture: <class 'stable_baselines3.common.policies.ActorCriticCnnPolicy'>
+Found CNN layers in policy_features with 7 layers
+  Registered hook for policy_features_cnn_0_Conv2d
+  Registered hook for policy_features_cnn_1_ReLU
+  Registered hook for policy_features_cnn_2_Conv2d
+  Registered hook for policy_features_cnn_3_ReLU
+  Registered hook for policy_features_cnn_4_Conv2d
+  Registered hook for policy_features_cnn_5_ReLU
+  Registered hook for policy_features_cnn_6_Flatten
+Found linear layers in policy_features with 2 layers
+  Registered hook for policy_features_linear_0_Linear
+  Registered hook for policy_features_linear_1_ReLU
+Found CNN layers in value_features with 7 layers
+  Registered hook for value_features_cnn_0_Conv2d
+  Registered hook for value_features_cnn_1_ReLU
+  Registered hook for value_features_cnn_2_Conv2d
+  Registered hook for value_features_cnn_3_ReLU
+  Registered hook for value_features_cnn_4_Conv2d
+  Registered hook for value_features_cnn_5_ReLU
+  Registered hook for value_features_cnn_6_Flatten
+Found linear layers in value_features with 2 layers
+  Registered hook for value_features_linear_0_Linear
+  Registered hook for value_features_linear_1_ReLU
+Found CNN layers in shared_features with 7 layers
+  Registered hook for shared_features_cnn_0_Conv2d
+  Registered hook for shared_features_cnn_1_ReLU
+  Registered hook for shared_features_cnn_2_Conv2d
+  Registered hook for shared_features_cnn_3_ReLU
+  Registered hook for shared_features_cnn_4_Conv2d
+  Registered hook for shared_features_cnn_5_ReLU
+  Registered hook for shared_features_cnn_6_Flatten
+Found linear layers in shared_features with 2 layers
+  Registered hook for shared_features_linear_0_Linear
+  Registered hook for shared_features_linear_1_ReLU
+  Registered hook for action_net_Linear
+  Registered hook for value_net_Linear
+Total hooks registered: 29
+Feature extractors found: ['policy_features', 'value_features', 'shared_features']
+Registered hooks for 29 layers
+
+Evaluating ppo model with RSA collection...
+Episodes: 10, Max length: 10000
+Will sample up to 20 states from all collected states for RSA
+  Episode 1: Reward=21.0, Length=1669, Total States Collected=1669, Time=4.88s
+  Episode 2: Reward=21.0, Length=1664, Total States Collected=3333, Time=4.50s
+  Episode 3: Reward=21.0, Length=1665, Total States Collected=4998, Time=4.65s
+  Episode 4: Reward=21.0, Length=1649, Total States Collected=6647, Time=4.47s
+  Episode 5: Reward=21.0, Length=1645, Total States Collected=8292, Time=4.61s
+  Episode 6: Reward=21.0, Length=1667, Total States Collected=9959, Time=4.52s
+  Episode 7: Reward=21.0, Length=1645, Total States Collected=11604, Time=4.47s
+  Episode 8: Reward=21.0, Length=1666, Total States Collected=13270, Time=4.52s
+  Episode 9: Reward=21.0, Length=1643, Total States Collected=14913, Time=4.62s
+  Episode 10: Reward=21.0, Length=1670, Total States Collected=16583, Time=4.52s
+
+Collected 16583 total states during evaluation
+Sampling 20 states for RSA analysis...
+Randomly sampled 20 states from 16583 total states
+Performing RSA analysis with 20 sampled states...
+Behavioral similarity stats:
+  total_states: 20
+  total_pairs: 190
+  symmetric_pairs: 1
+  symmetry_ratio: 0.005263157894736842
+  diagonal_sum: 20
+  Processing policy_features_cnn_0_Conv2d (shape: (20, 32, 20, 20))
+    Pearson correlation: 0.3024 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 1.0000 ± 0.0002
+    Dissimilar group mean: 0.9964 ± 0.0007
+    Group difference p-value: 0.0000
+  Processing value_features_cnn_0_Conv2d (shape: (20, 32, 20, 20))
+    Pearson correlation: 0.3024 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 1.0000 ± 0.0002
+    Dissimilar group mean: 0.9964 ± 0.0007
+    Group difference p-value: 0.0000
+  Processing shared_features_cnn_0_Conv2d (shape: (20, 32, 20, 20))
+    Pearson correlation: 0.3024 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 1.0000 ± 0.0002
+    Dissimilar group mean: 0.9964 ± 0.0007
+    Group difference p-value: 0.0000
+  Processing policy_features_cnn_1_ReLU (shape: (20, 32, 20, 20))
+    Pearson correlation: 0.2920 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9992 ± 0.0025
+    Dissimilar group mean: 0.9333 ± 0.0138
+    Group difference p-value: 0.0000
+  Processing value_features_cnn_1_ReLU (shape: (20, 32, 20, 20))
+    Pearson correlation: 0.2920 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9992 ± 0.0025
+    Dissimilar group mean: 0.9333 ± 0.0138
+    Group difference p-value: 0.0000
+  Processing shared_features_cnn_1_ReLU (shape: (20, 32, 20, 20))
+    Pearson correlation: 0.2920 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9992 ± 0.0025
+    Dissimilar group mean: 0.9333 ± 0.0138
+    Group difference p-value: 0.0000
+  Processing policy_features_cnn_2_Conv2d (shape: (20, 64, 9, 9))
+    Pearson correlation: 0.3107 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9991 ± 0.0030
+    Dissimilar group mean: 0.9189 ± 0.0157
+    Group difference p-value: 0.0000
+  Processing value_features_cnn_2_Conv2d (shape: (20, 64, 9, 9))
+    Pearson correlation: 0.3107 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9991 ± 0.0030
+    Dissimilar group mean: 0.9189 ± 0.0157
+    Group difference p-value: 0.0000
+  Processing shared_features_cnn_2_Conv2d (shape: (20, 64, 9, 9))
+    Pearson correlation: 0.3107 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9991 ± 0.0030
+    Dissimilar group mean: 0.9189 ± 0.0157
+    Group difference p-value: 0.0000
+  Processing policy_features_cnn_3_ReLU (shape: (20, 64, 9, 9))
+    Pearson correlation: 0.3308 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9962 ± 0.0121
+    Dissimilar group mean: 0.6273 ± 0.0684
+    Group difference p-value: 0.0000
+  Processing value_features_cnn_3_ReLU (shape: (20, 64, 9, 9))
+    Pearson correlation: 0.3308 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9962 ± 0.0121
+    Dissimilar group mean: 0.6273 ± 0.0684
+    Group difference p-value: 0.0000
+  Processing shared_features_cnn_3_ReLU (shape: (20, 64, 9, 9))
+    Pearson correlation: 0.3308 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9962 ± 0.0121
+    Dissimilar group mean: 0.6273 ± 0.0684
+    Group difference p-value: 0.0000
+  Processing policy_features_cnn_4_Conv2d (shape: (20, 64, 7, 7))
+    Pearson correlation: 0.3270 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9965 ± 0.0111
+    Dissimilar group mean: 0.4955 ± 0.0977
+    Group difference p-value: 0.0000
+  Processing value_features_cnn_4_Conv2d (shape: (20, 64, 7, 7))
+    Pearson correlation: 0.3270 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9965 ± 0.0111
+    Dissimilar group mean: 0.4955 ± 0.0977
+    Group difference p-value: 0.0000
+  Processing shared_features_cnn_4_Conv2d (shape: (20, 64, 7, 7))
+    Pearson correlation: 0.3270 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9965 ± 0.0111
+    Dissimilar group mean: 0.4955 ± 0.0977
+    Group difference p-value: 0.0000
+  Processing policy_features_cnn_5_ReLU (shape: (20, 64, 7, 7))
+    Pearson correlation: 0.3351 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9960 ± 0.0128
+    Dissimilar group mean: 0.2893 ± 0.1359
+    Group difference p-value: 0.0000
+  Processing value_features_cnn_5_ReLU (shape: (20, 64, 7, 7))
+    Pearson correlation: 0.3351 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9960 ± 0.0128
+    Dissimilar group mean: 0.2893 ± 0.1359
+    Group difference p-value: 0.0000
+  Processing shared_features_cnn_5_ReLU (shape: (20, 64, 7, 7))
+    Pearson correlation: 0.3351 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9960 ± 0.0128
+    Dissimilar group mean: 0.2893 ± 0.1359
+    Group difference p-value: 0.0000
+  Processing policy_features_cnn_6_Flatten (shape: (20, 3136))
+    Pearson correlation: 0.3351 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9960 ± 0.0128
+    Dissimilar group mean: 0.2893 ± 0.1359
+    Group difference p-value: 0.0000
+  Processing value_features_cnn_6_Flatten (shape: (20, 3136))
+    Pearson correlation: 0.3351 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9960 ± 0.0128
+    Dissimilar group mean: 0.2893 ± 0.1359
+    Group difference p-value: 0.0000
+  Processing shared_features_cnn_6_Flatten (shape: (20, 3136))
+    Pearson correlation: 0.3351 (p=0.0000)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9960 ± 0.0128
+    Dissimilar group mean: 0.2893 ± 0.1359
+    Group difference p-value: 0.0000
+  Processing policy_features_linear_0_Linear (shape: (20, 512))
+    Pearson correlation: 0.2250 (p=0.0018)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9986 ± 0.0045
+    Dissimilar group mean: 0.3880 ± 0.1874
+    Group difference p-value: 0.0000
+  Processing value_features_linear_0_Linear (shape: (20, 512))
+    Pearson correlation: 0.2250 (p=0.0018)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9986 ± 0.0045
+    Dissimilar group mean: 0.3880 ± 0.1874
+    Group difference p-value: 0.0000
+  Processing shared_features_linear_0_Linear (shape: (20, 512))
+    Pearson correlation: 0.2250 (p=0.0018)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9986 ± 0.0045
+    Dissimilar group mean: 0.3880 ± 0.1874
+    Group difference p-value: 0.0000
+  Processing policy_features_linear_1_ReLU (shape: (20, 512))
+    Pearson correlation: 0.2706 (p=0.0002)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9979 ± 0.0065
+    Dissimilar group mean: 0.2646 ± 0.1840
+    Group difference p-value: 0.0000
+  Processing value_features_linear_1_ReLU (shape: (20, 512))
+    Pearson correlation: 0.2706 (p=0.0002)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9979 ± 0.0065
+    Dissimilar group mean: 0.2646 ± 0.1840
+    Group difference p-value: 0.0000
+  Processing shared_features_linear_1_ReLU (shape: (20, 512))
+    Pearson correlation: 0.2706 (p=0.0002)
+    Spearman correlation: 0.1253 (p=0.0849)
+    Similar group mean: 0.9979 ± 0.0065
+    Dissimilar group mean: 0.2646 ± 0.1840
+    Group difference p-value: 0.0000
+  Processing action_net_Linear (shape: (20, 6))
+    Pearson correlation: 0.1361 (p=0.0611)
+    Spearman correlation: 0.1240 (p=0.0883)
+    Similar group mean: 0.9960 ± 0.0126
+    Dissimilar group mean: 0.0056 ± 0.5019
+    Group difference p-value: 0.0000
+
+PPO Results:
+  Mean Reward: 21.00 ± 0.00
+  Win Rate: 100.00%
+  Mean Episode Length: 1658.3 ± 10.7
+  RSA Analysis: 29 layers analyzed with 20 states (from 16583 total)
+
+Analysis complete for ppo
+No value predictions available for ppo
+Saved plot to results/pong_test/plots/ppo_rsa.png
+
+================================================================================
+ANALYSIS SUMMARY
+================================================================================
+
+PPO:
+
+Results saved to: /mnt/home/msrinath/workspace/state-abstraction-capacity/results/pong_test
+Plots saved to: /mnt/home/msrinath/workspace/state-abstraction-capacity/results/pong_test/plots
+
+Analysis complete!
+A.L.E: Arcade Learning Environment (version 0.11.2+ecc1138)
+[Powered by Stella]
+ALSA lib .././../src/v1.2.13-3eeec0cd85.clean/src/confmisc.c:855:(parse_card) cannot find card '0'
+ALSA lib .././../src/v1.2.13-3eeec0cd85.clean/src/conf.c:5205:(_snd_config_evaluate) function snd_func_card_inum returned error: No such file or directory
+ALSA lib .././../src/v1.2.13-3eeec0cd85.clean/src/confmisc.c:422:(snd_func_concat) error evaluating strings
+ALSA lib .././../src/v1.2.13-3eeec0cd85.clean/src/conf.c:5205:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib .././../src/v1.2.13-3eeec0cd85.clean/src/confmisc.c:1342:(snd_func_refer) error evaluating name
+ALSA lib .././../src/v1.2.13-3eeec0cd85.clean/src/conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib .././../src/v1.2.13-3eeec0cd85.clean/src/conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib ../.././../src/v1.2.13-3eeec0cd85.clean/src/pcm/pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM default
+
+

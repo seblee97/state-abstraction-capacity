@@ -6,17 +6,18 @@
 #SBATCH --time=04:00:00
 #SBATCH --mem=8G
 #SBATCH --cpus-per-task=4
+#SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
 
 # Hyperparameter grid
-LEARNING_RATES=(0.001 0.0003 0.0001)
+LEARNING_RATES=(0.001 0.0003)
 NUM_QUANTILES=(50 100 200)
 KAPPAS=(0.5 1.0 2.0)
 BATCH_SIZES=(64 128)
-SEEDS=(0 1 2 3 4)
+SEEDS=(42)
 
 # Calculate indices from SLURM_ARRAY_TASK_ID
 # Total combinations: 3 * 3 * 3 * 2 * 5 = 270, but we'll do 90 (without seed variation first)
@@ -63,8 +64,9 @@ echo "  Batch size: $BS"
 echo "  Seed: $SEED"
 echo "  Results dir: $RESULTS_DIR"
 
-# Activate conda environment (adjust as needed)
-# source activate sac
+# Activate conda environment
+source ~/.bashrc
+conda activate sac
 
 python -m sac.run \
     -m qrdqn \

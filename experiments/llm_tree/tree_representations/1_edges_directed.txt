@@ -1,0 +1,43 @@
+TASK DESCRIPTION:
+You are an agent navigating a spatial maze with corridors and junctions. Your position is defined by the current node ID. At each step, you will be given a list of connected nodes that you can move to. You must respond with the node ID you want to move to next.
+Your goal is to traverse the maze efficiently to reach a target node ID.
+The maze has a fractal structure: corridors alternate between horizontal (East/West) and vertical (North/South) directions at each junction.
+Below is the representation of the maze.
+---------------------------------------------------
+
+GRAPH FORMAT: Directed Edge List (Ordered)
+Each line shows a connection between two nodes with the cardinal direction.
+Format: 'NodeA --Direction--> NodeB' means moving Direction from A reaches B.
+Edges are listed in a structured order following the maze hierarchy.
+
+9 --North--> 14
+9 --South--> 8
+14 --South--> 9
+8 --North--> 9
+14 --West--> 7
+14 --East--> 15
+7 --East--> 14
+15 --West--> 14
+8 --West--> 13
+8 --East--> 6
+13 --East--> 8
+6 --West--> 8
+7 --North--> 3
+7 --South--> 10
+3 --South--> 7
+10 --North--> 7
+15 --North--> 4
+15 --South--> 5
+4 --South--> 15
+5 --North--> 15
+13 --North--> 12
+13 --South--> 1
+12 --South--> 13
+1 --North--> 13
+6 --North--> 2
+6 --South--> 11
+2 --South--> 6
+11 --North--> 6
+
+Start Node: 9
+Target Node: 11

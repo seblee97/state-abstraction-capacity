@@ -6,17 +6,18 @@
 #SBATCH --time=04:00:00
 #SBATCH --mem=8G
 #SBATCH --cpus-per-task=4
+#SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
 
 # Hyperparameter grid
-LEARNING_RATES=(0.001 0.0003 0.0001)
+LEARNING_RATES=(0.001 0.0003)
 FEATURE_DIMS=(64 128 256)
 RECONSTRUCTION=(0 1)  # 0=False, 1=True
 BATCH_SIZES=(64 128)
-SEEDS=(0 1 2 3 4)
+SEEDS=(42)
 
 # Total combinations: 3 * 3 * 2 * 2 * 5 = 180
 # For smaller sweep: 3 * 2 * 2 * 2 * 5 = 120
@@ -75,8 +76,9 @@ echo "  Batch size: $BS"
 echo "  Seed: $SEED"
 echo "  Results dir: $RESULTS_DIR"
 
-# Activate conda environment (adjust as needed)
-# source activate sac
+# Activate conda environment
+source ~/.bashrc
+conda activate sac
 
 python -m sac.run \
     -m dsr \
