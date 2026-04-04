@@ -9,8 +9,8 @@ reward_positions:
     - [18, 8]
     - [28, 8]
     - [28, 3]
-    - [32, 3]
-    - [32, 1]
+    - [33, 3]
+    - [33, 1]
     - [35, 1]
 
 # provide either one set of statistics (used for all rewards)
