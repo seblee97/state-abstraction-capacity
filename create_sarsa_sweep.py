@@ -85,7 +85,8 @@ for start, lr, lam, timeout in itertools.product(starts[:2], lrs, lambdas, timeo
             f" -num_ep {num_ep}"
             f" -test {test_freq}"
             f" -viz {viz_freq}"
-            f" -save {save_freq}\n"
+            f" -save {save_freq}"
+            f" -es 5000\n"
         )
 
     os.chmod(job_path, 0o755)
@@ -134,7 +135,8 @@ for lr, lam, timeout in itertools.product(lrs, lambdas, timeouts):
             f" -num_ep {num_ep}"
             f" -test {test_freq}"
             f" -viz {viz_freq}"
-            f" -save {save_freq}\n"
+            f" -save {save_freq}"
+            f" -es 5000\n"
         )
 
     os.chmod(job_path, 0o755)
