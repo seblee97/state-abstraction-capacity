@@ -23,8 +23,14 @@ class ConvDSRNet(nn.Module):
     reconstruction head for auxiliary loss.
     """
 
-    def __init__(self, num_actions, feature_dim=128, reconstruction=False,
-                 state_shape=None, optimistic_init=0.0):
+    def __init__(
+        self,
+        num_actions,
+        feature_dim=128,
+        reconstruction=False,
+        state_shape=None,
+        optimistic_init=0.0,
+    ):
         super(ConvDSRNet, self).__init__()
         self.num_actions = num_actions
         self.feature_dim = feature_dim
@@ -34,10 +40,11 @@ class ConvDSRNet(nn.Module):
         # Encoder: state -> features (phi)
         self.conv1 = nn.Conv2d(
             1, 16, kernel_size=3, stride=1, padding=1
-        )  # Assuming single-channel input
+        )  # Grayscale input
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
         self.fc1 = nn.LazyLinear(128)
         self.fc2 = nn.Linear(128, feature_dim)
+        self.feature_norm = nn.LayerNorm(feature_dim)
 
         # Successor features: one SR vector per action
         # Output shape: (batch, num_actions, feature_dim)
@@ -63,7 +70,8 @@ class ConvDSRNet(nn.Module):
         self._conv_shape = x.shape[1:]  # Save for decoder
         x = x.view(x.size(0), -1)  # Flatten
         x = torch.relu(self.fc1(x))
-        x = self.fc2(x)  # No activation on features
+        x = self.fc2(x)
+        x = self.feature_norm(x)  # Normalize features to prevent SR explosion
         return x
 
     def forward(self, x):
@@ -83,7 +91,7 @@ class ConvDSRNet(nn.Module):
         sr, phi = self.forward(x)
         # sr: (batch, num_actions, feature_dim)
         # reward_weights: (feature_dim,)
-        q = torch.einsum('baf,f->ba', sr, self.reward_weights)
+        q = torch.einsum("baf,f->ba", sr, self.reward_weights)
         return q
 
     def _build_decoder(self, device):
@@ -91,8 +99,12 @@ class ConvDSRNet(nn.Module):
         c, h, w = self._conv_shape
         self.decoder_fc1 = nn.Linear(self.feature_dim, 128).to(device)
         self.decoder_fc2 = nn.Linear(128, c * h * w).to(device)
-        self.deconv1 = nn.ConvTranspose2d(32, 16, kernel_size=3, stride=1, padding=1).to(device)
-        self.deconv2 = nn.ConvTranspose2d(16, 1, kernel_size=3, stride=1, padding=1).to(device)
+        self.deconv1 = nn.ConvTranspose2d(
+            32, 16, kernel_size=3, stride=1, padding=1
+        ).to(device)
+        self.deconv2 = nn.ConvTranspose2d(16, 1, kernel_size=3, stride=1, padding=1).to(
+            device
+        )
         self._decoder_built = True
 
     def reconstruct(self, phi):
@@ -123,8 +135,14 @@ class FFDSRNet(nn.Module):
     reconstruction head for auxiliary loss.
     """
 
-    def __init__(self, input_dim, num_actions, feature_dim=128,
-                 reconstruction=False, optimistic_init=0.0):
+    def __init__(
+        self,
+        input_dim,
+        num_actions,
+        feature_dim=128,
+        reconstruction=False,
+        optimistic_init=0.0,
+    ):
         super(FFDSRNet, self).__init__()
         self.num_actions = num_actions
         self.feature_dim = feature_dim
@@ -135,6 +153,7 @@ class FFDSRNet(nn.Module):
         self.fc1 = nn.Linear(input_dim, 128)
         self.fc2 = nn.Linear(128, 128)
         self.fc3 = nn.Linear(128, feature_dim)
+        self.feature_norm = nn.LayerNorm(feature_dim)
 
         # Successor features: one SR vector per action
         # Output shape: (batch, num_actions, feature_dim)
@@ -160,7 +179,8 @@ class FFDSRNet(nn.Module):
             x = torch.FloatTensor(x).to(next(self.parameters()).device)
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
-        x = self.fc3(x)  # No activation on features
+        x = self.fc3(x)
+        x = self.feature_norm(x)  # Normalize features to prevent SR explosion
         return x
 
     def forward(self, x):
@@ -180,7 +200,7 @@ class FFDSRNet(nn.Module):
         sr, phi = self.forward(x)
         # sr: (batch, num_actions, feature_dim)
         # reward_weights: (feature_dim,)
-        q = torch.einsum('baf,f->ba', sr, self.reward_weights)
+        q = torch.einsum("baf,f->ba", sr, self.reward_weights)
         return q
 
     def reconstruct(self, phi):
@@ -250,24 +270,25 @@ class DSR(base.BaseModel):
     """
 
     def __init__(
-            self,
-            sample_state,
-            num_actions,
-            batch_size: int,
-            learning_rate: float,
-            discount_factor: float,
-            exploration_rate: float,
-            exploration_decay: float,
-            target_update_frequency: int,
-            replay_buffer_size: int,
-            burnin: int,
-            feature_dim: int = 128,
-            reconstruction: bool = False,
-            reconstruction_coef: float = 0.1,
-            convolutional: bool = False,
-            optimistic_init: float = 0.0,
-            weight_decay: float = 0.0,
-        ):
+        self,
+        sample_state,
+        num_actions,
+        batch_size: int,
+        learning_rate: float,
+        discount_factor: float,
+        exploration_rate: float,
+        exploration_decay: float,
+        target_update_frequency: int,
+        replay_buffer_size: int,
+        burnin: int,
+        feature_dim: int = 128,
+        reconstruction: bool = False,
+        reconstruction_coef: float = 0.1,
+        convolutional: bool = False,
+        optimistic_init: float = 0.0,
+        weight_decay: float = 0.0,
+        max_grad_norm: float = 10.0,
+    ):
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -281,13 +302,13 @@ class DSR(base.BaseModel):
                 feature_dim=feature_dim,
                 reconstruction=reconstruction,
                 state_shape=state_shape,
-                optimistic_init=optimistic_init
+                optimistic_init=optimistic_init,
             )
             self._target_net = ConvDSRNet(
                 num_actions=num_actions,
                 feature_dim=feature_dim,
                 reconstruction=False,  # Target net doesn't need reconstruction
-                state_shape=state_shape
+                state_shape=state_shape,
             ).to(self._device)
             self._state_shape = state_shape
         else:
@@ -297,13 +318,13 @@ class DSR(base.BaseModel):
                 num_actions=num_actions,
                 feature_dim=feature_dim,
                 reconstruction=reconstruction,
-                optimistic_init=optimistic_init
+                optimistic_init=optimistic_init,
             )
             self._target_net = FFDSRNet(
                 input_dim=input_dim,
                 num_actions=num_actions,
                 feature_dim=feature_dim,
-                reconstruction=False  # Target net doesn't need reconstruction
+                reconstruction=False,  # Target net doesn't need reconstruction
             ).to(self._device)
             self._state_shape = (input_dim,)
 
@@ -318,7 +339,9 @@ class DSR(base.BaseModel):
         self._reconstruction = reconstruction
         self._reconstruction_coef = reconstruction_coef
 
-        self._optimizer = optim.AdamW(self._net.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        self._optimizer = optim.AdamW(
+            self._net.parameters(), lr=learning_rate, weight_decay=weight_decay
+        )
 
         self._buffer = ReplayBuffer(capacity=replay_buffer_size)
 
@@ -330,6 +353,7 @@ class DSR(base.BaseModel):
         self._target_update_frequency = target_update_frequency
         self._burnin = burnin
         self._step_count = 0
+        self._max_grad_norm = max_grad_norm
 
         super().__init__()
 
@@ -357,21 +381,27 @@ class DSR(base.BaseModel):
             state = np.array(state)
         shape = (1,) + self._state_shape
         with torch.no_grad():
-            q = self._net.get_q_values(torch.FloatTensor(state.reshape(shape)).to(self._device))
+            q = self._net.get_q_values(
+                torch.FloatTensor(state.reshape(shape)).to(self._device)
+            )
             return torch.argmax(q).item()
 
     def get_qvals(self, state):
         """Get Q-values for all actions in a state."""
         shape = (1,) + self._state_shape
         with torch.no_grad():
-            q = self._net.get_q_values(torch.FloatTensor(state.reshape(shape)).to(self._device))
+            q = self._net.get_q_values(
+                torch.FloatTensor(state.reshape(shape)).to(self._device)
+            )
             return q
 
     def get_successor_features(self, state):
         """Get successor features for all actions in a state."""
         shape = (1,) + self._state_shape
         with torch.no_grad():
-            sr, phi = self._net(torch.FloatTensor(state.reshape(shape)).to(self._device))
+            sr, phi = self._net(
+                torch.FloatTensor(state.reshape(shape)).to(self._device)
+            )
             return sr, phi
 
     def get_state_features(self, state):
@@ -415,32 +445,59 @@ class DSR(base.BaseModel):
         rewards_t = torch.FloatTensor(rewards).to(self._device)
         actives_t = torch.FloatTensor(actives).to(self._device).clamp(0, 1)
 
-        # Forward pass
+        # Forward pass (online)
         sr, phi = self._net(states_t)
         # sr: (batch, num_actions, feature_dim)
         # phi: (batch, feature_dim)
 
         # Get successor features for taken actions
-        # sr_a: (batch, feature_dim)
-        sr_a = sr.gather(1, actions_t.view(-1, 1, 1).expand(-1, 1, self._feature_dim)).squeeze(1)
+        sr_a = sr.gather(
+            1, actions_t.view(-1, 1, 1).expand(-1, 1, self._feature_dim)
+        ).squeeze(
+            1
+        )  # (batch, feature_dim)
 
-        # Compute target successor features using target network
+
+        # Online features for NEXT states (needed for reward loss / representation learning)
+        _, next_phi_online = self._net(next_states_t)  # (B,F)
+
+        # Compute target successor features using target network (consistent target; no mixing)
         with torch.no_grad():
-            next_sr, next_phi = self._target_net(next_states_t)
-            # For target, use greedy action selection
-            next_q = torch.einsum('baf,f->ba', next_sr, self._net.reward_weights)
-            next_actions = next_q.argmax(dim=1)
-            # Get SR for greedy actions
-            next_sr_a = next_sr.gather(1, next_actions.view(-1, 1, 1).expand(-1, 1, self._feature_dim)).squeeze(1)
+            next_sr_tgt, next_phi_tgt = self._target_net(next_states_t)
+            # next_sr, next_phi = self._target_net(next_states_t)
+            # next_sr: (batch, num_actions, feature_dim)
 
-            # TD target for SR: phi(s) + gamma * psi(s', a')
-            sr_target = phi.detach() + self._discount_factor * next_sr_a * actives_t.unsqueeze(1)
+            # Greedy action selection using TARGET Q(s', a) = psi_target(s', a)^T w_target
+            next_q_tgt = torch.einsum("baf,f->ba", next_sr_tgt, self._target_net.reward_weights)
+            next_actions = next_q_tgt.argmax(dim=1)
+            # next_q = torch.einsum("baf,f->ba", next_sr, self._target_net.reward_weights)
+            # next_actions = next_q.argmax(dim=1)
+
+            # Gather SR(s', a*)
+            # next_sr_a = next_sr.gather(
+            #     1, next_actions.view(-1, 1, 1).expand(-1, 1, self._feature_dim)
+            # ).squeeze(
+            #     1
+            # )  # (batch, feature_dim)
+            next_sr_a = next_sr_tgt.gather(
+                1, next_actions.view(-1, 1, 1).expand(-1, 1, self._feature_dim)
+            ).squeeze(
+                1
+            )  # (batch, feature_dim)
+
+            # TD target for SR with r(s') convention: phi(s') + gamma * psi(s', a*) * active
+            # This computes expected discounted future phi values starting from s'
+            sr_target = (
+                next_phi_tgt
+                + self._discount_factor * next_sr_a * actives_t.unsqueeze(1)
+            )
 
         # Successor representation loss (MSE)
         sr_loss = nn.MSELoss()(sr_a, sr_target)
 
         # Reward prediction loss: r = phi(s) @ w
-        predicted_rewards = torch.einsum('bf,f->b', phi, self._net.reward_weights)
+        predicted_rewards = torch.einsum("bf,f->b", next_phi_online, self._net.reward_weights)
+        # predicted_rewards = torch.einsum("bf,f->b", next_phi.detach(), self._net.reward_weights)
         reward_loss = nn.MSELoss()(predicted_rewards, rewards_t)
 
         # Total loss
@@ -456,6 +513,8 @@ class DSR(base.BaseModel):
 
         self._optimizer.zero_grad()
         total_loss.backward()
+        if self._max_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self._net.parameters(), self._max_grad_norm)
         self._optimizer.step()
 
         self._step_count += 1
@@ -465,6 +524,8 @@ class DSR(base.BaseModel):
         self._exploration_rate = max(
             self._exploration_rate * self._exploration_decay, 0.01
         )
+
+        # print(self._exploration_rate)
 
         return {
             "loss": total_loss.item(),

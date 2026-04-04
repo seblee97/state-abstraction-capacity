@@ -167,7 +167,7 @@ parser.add_argument(
     "--max_grad_norm",
     type=float,
     default=0.5,
-    help="Maximum gradient norm for clipping (for PPO).",
+    help="Maximum gradient norm for clipping (for PPO, DSR).",
 )
 parser.add_argument(
     "-conv",
@@ -436,6 +436,7 @@ def setup_model(model_type: str, env):
             convolutional=args.convolutional,
             optimistic_init=args.optimistic_init,
             weight_decay=args.weight_decay,
+            max_grad_norm=args.max_grad_norm,
         )
     elif model_type == "qrdqn":
         sample_state = env.reset_environment()
