@@ -17,6 +17,7 @@ def train(
     visualisation_frequency,
     experiment_dir,
     early_stop_episodes: int = 0,
+    save_stats_frequency: int = 500,
 ):
 
     episode_lengths = []
@@ -88,6 +89,7 @@ def train(
             )
         if i % save_model_frequency == 0:
             model.save_model(experiment_dir, i)
+        if i % save_stats_frequency == 0:
             np.savez(
                 os.path.join(experiment_dir, "training_stats.npz"),
                 episode_lengths=episode_lengths,

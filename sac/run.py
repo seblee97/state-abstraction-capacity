@@ -209,6 +209,13 @@ parser.add_argument(
     help="Frequency of saving the model (weights or table) during training.",
 )
 parser.add_argument(
+    "-save_stats",
+    "--save_stats_frequency",
+    type=int,
+    default=500,
+    help="Frequency of saving training stats to npz during training.",
+)
+parser.add_argument(
     "-viz",
     "--visualisation_frequency",
     type=int,
@@ -584,6 +591,7 @@ if __name__ == "__main__":
             visualisation_frequency=args.visualisation_frequency,
             experiment_dir=experiment_dir,
             early_stop_episodes=args.early_stop_episodes,
+            save_stats_frequency=args.save_stats_frequency,
         )
     elif args.model == "ppo":
         ppo_trainer.train(

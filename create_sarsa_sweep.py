@@ -22,7 +22,7 @@ eps = 1.0
 gamma = 0.99
 test_freq = 100
 viz_freq = 2000
-save_freq = 2000
+save_freq = 500
 
 PROJECT_DIR = "/mnt/home/slee1/state-abstraction-capacity"
 VENV = "/mnt/home/slee1/venvs/sac/bin/activate"
