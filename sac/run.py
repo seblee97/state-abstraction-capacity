@@ -313,6 +313,13 @@ parser.add_argument(
     default=0.8,
     help="Eligibility trace decay parameter λ for SARSA(λ).",
 )
+parser.add_argument(
+    "-es",
+    "--early_stop_episodes",
+    type=int,
+    default=0,
+    help="Stop training if test reward is still 0 after this many episodes (0 to disable).",
+)
 
 
 def organise_absolute_experiment_directory(dir: str) -> str:
@@ -576,6 +583,7 @@ if __name__ == "__main__":
             save_model_frequency=args.save_model_frequency,
             visualisation_frequency=args.visualisation_frequency,
             experiment_dir=experiment_dir,
+            early_stop_episodes=args.early_stop_episodes,
         )
     elif args.model == "ppo":
         ppo_trainer.train(
