@@ -124,13 +124,16 @@ def train(
     )
 
 
-def test(model, env, episode_timeout):
+def test(model, env, episode_timeout, epsilon=0.05):
     state_ = env.reset_environment(train=False)
     state = state_[:2]
     total_reward = 0
     episode_length = 0
     for step in range(episode_timeout):
-        action = model.select_greedy_action(state)
+        if np.random.rand() < epsilon:
+            action = np.random.choice(env.action_space)
+        else:
+            action = model.select_greedy_action(state)
         reward, next_state_ = env.step(action)
         next_state = next_state_[:2]
         total_reward += reward
