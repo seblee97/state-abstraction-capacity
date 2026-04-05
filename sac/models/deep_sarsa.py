@@ -176,11 +176,12 @@ class DeepSARSA(base.BaseModel):
         if self._use_target and self._step_count % self._target_update_frequency == 0:
             self._target_net.load_state_dict(self._net.state_dict())
 
+        return {"loss": loss.item()}
+
+    def decay_epsilon(self):
         self._exploration_rate = max(
             self._exploration_rate * self._exploration_decay, 0.01
         )
-
-        return {"loss": loss.item()}
 
     def save_model(self, path, episode):
         save_path = os.path.join(path, f"deep_sarsa_model_{episode}.pth")
@@ -339,12 +340,14 @@ class DeepSARSALambda(base.BaseModel):
         if not active:
             self._reset_traces()
 
-        self._exploration_rate = max(
-            self._exploration_rate * self._exploration_decay, 0.01
-        )
         self._step_count += 1
 
         return {"loss": delta ** 2}
+
+    def decay_epsilon(self):
+        self._exploration_rate = max(
+            self._exploration_rate * self._exploration_decay, 0.01
+        )
 
     def save_model(self, path, episode):
         save_path = os.path.join(path, f"deep_sarsa_lambda_model_{episode}.pth")

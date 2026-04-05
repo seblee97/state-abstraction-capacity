@@ -99,6 +99,9 @@ def train(
                 episode_losses=episode_losses,
             )
 
+        if hasattr(model, 'decay_epsilon'):
+            model.decay_epsilon()
+
         episode_lengths.append(episode_length)
         episode_rewards.append(episode_reward)
         episode_losses.append(episode_loss / episode_length)
