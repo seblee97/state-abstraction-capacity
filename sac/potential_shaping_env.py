@@ -39,7 +39,7 @@ class PotentialShapingEnv(wrapper.Wrapper):
         self._shaping_scale = shaping_scale
         self._gamma = gamma
         self._distances = self._bfs_distances(map_ascii_path, goal)
-        self._prev_state = None
+        self._prev_position = None
 
     def _bfs_distances(self, map_ascii_path: str, goal: Tuple[int, int]):
         with open(map_ascii_path) as f:
@@ -61,19 +61,20 @@ class PotentialShapingEnv(wrapper.Wrapper):
                     queue.append(((nx, ny), d + 1))
         return dist
 
-    def _phi(self, state: Tuple[int, int]) -> float:
-        d = self._distances.get(tuple(state[:2]), None)
+    def _phi(self, position: Tuple[int, int]) -> float:
+        d = self._distances.get(tuple(position), None)
         if d is None:
             return 0.0
         return -self._shaping_scale * d
 
     def reset_environment(self, train: bool = True, map_yaml_path=None):
         state = self._env.reset_environment(train=train, map_yaml_path=map_yaml_path)
-        self._prev_state = state
+        self._prev_position = tuple(self._env.agent_position)
         return state
 
     def step(self, action) -> Tuple[float, tuple]:
         reward, next_state = self._env.step(action)
-        shaping = self._gamma * self._phi(next_state) - self._phi(self._prev_state)
-        self._prev_state = next_state
+        next_position = tuple(self._env.agent_position)
+        shaping = self._gamma * self._phi(next_position) - self._phi(self._prev_position)
+        self._prev_position = next_position
         return reward + shaping, next_state
