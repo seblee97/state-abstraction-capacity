@@ -17,7 +17,7 @@ from typing import Dict, Tuple, List, Optional
 from collections import deque
 
 from key_door import key_door_env, visualisation_env
-from sac.models import dqn, ppo
+from sac.models import dqn, ppo, deep_sarsa
 from sac import utils
 from sac.utils import dijkstra_policy
 
@@ -574,6 +574,100 @@ def accumulate_ppo_representations(model, env, state_shape, save_dir=DEFAULT_SAV
 
 
 # =============================================================================
+# SARSA Representation Extraction
+# =============================================================================
+
+def get_sarsa_representations(model, states):
+    """Extract representations from SARSA model at each layer."""
+    model._net.eval()
+    network = model._net
+    states = torch.tensor(states, dtype=torch.float32).to('cuda')
+    with torch.no_grad():
+        x = torch.relu(network.conv1(states))
+        x = torch.relu(network.conv2(x))
+        conv_x = x.view(x.size(0), -1)
+        x1 = torch.relu(network.fc1(conv_x))
+        x2 = torch.relu(network.fc2(x1))
+        qvals = network.fc3(x2)
+        vals = torch.max(qvals, dim=1).values
+        action = torch.argmax(qvals, dim=1)
+    return conv_x, x1, x2, vals, action
+
+
+def accumulate_sarsa_representations(model, env, state_shape, save_dir=DEFAULT_SAVE_DIR, prefix='sarsa', show=False):
+    """Accumulate representations for all states and compute RSA matrices for SARSA."""
+    conv_reprs = []
+    shared_reprs_1 = []
+    shared_reprs_2 = []
+    state_reprs = []
+    values = []
+    policy = []
+
+    state_id_mapping = {state: i for i, state in enumerate(env.positional_state_space)}
+    id_state_mapping = {i: state for i, state in enumerate(env.positional_state_space)}
+    state_to_value = {id_state_mapping[i]: 0.0 for i in range(len(env.positional_state_space))}
+    state_to_policy = {id_state_mapping[i]: 0.0 for i in range(len(env.positional_state_space))}
+
+    for state in env.positional_state_space:
+        env.move_agent_to(state)
+        state_input = env.get_state_representation()
+        shape = (1,) + state_shape
+        state_input = torch.FloatTensor(state_input.reshape(shape)).to('cuda')
+        conv, shared_1, shared_2, vals, actions = get_sarsa_representations(model, state_input)
+        conv_reprs.append(conv.cpu().numpy())
+        shared_reprs_1.append(shared_1.cpu().numpy())
+        shared_reprs_2.append(shared_2.cpu().numpy())
+        state_reprs.append(state_input.cpu().numpy())
+        values.append(vals.cpu().numpy())
+        policy.append(actions.cpu().numpy())
+        state_to_value[state] = vals.item()
+        state_to_policy[state] = actions.item()
+
+    conv_reprs = np.vstack(conv_reprs)
+    shared_reprs_1 = np.vstack(shared_reprs_1)
+    shared_reprs_2 = np.vstack(shared_reprs_2)
+    state_reprs = np.vstack(state_reprs).reshape(len(state_reprs), -1)
+    values = np.hstack(values)
+    policy = np.hstack(policy)
+
+    print(f"[{prefix}] Input State Shape: {state_reprs.shape}")
+    print(f"[{prefix}] Conv Shape: {conv_reprs.shape}")
+    print(f"[{prefix}] FC1 Shape: {shared_reprs_1.shape}, PR: {calculate_participation_ratio(shared_reprs_1):.2f}")
+    print(f"[{prefix}] FC2 Shape: {shared_reprs_2.shape}, PR: {calculate_participation_ratio(shared_reprs_2):.2f}")
+    print(f"[{prefix}] Values: min={np.min(values):.2f}, max={np.max(values):.2f}, mean={np.mean(values):.2f}")
+
+    state_rsa = plot_rsa_matrix(state_reprs, f"{prefix} Input State RSA",
+                                 save_name=f"{prefix}_state_rsa.pdf", save_dir=save_dir, show=show)
+    conv_rsa = plot_rsa_matrix(conv_reprs, f"{prefix} Conv RSA",
+                                save_name=f"{prefix}_conv_rsa.pdf", save_dir=save_dir, show=show)
+    shared_1_rsa = plot_rsa_matrix(shared_reprs_1, f"{prefix} FC1 RSA",
+                                    save_name=f"{prefix}_fc1_rsa.pdf", save_dir=save_dir, show=show)
+    shared_2_rsa = plot_rsa_matrix(shared_reprs_2, f"{prefix} FC2 RSA",
+                                    save_name=f"{prefix}_fc2_rsa.pdf", save_dir=save_dir, show=show)
+
+    env.plot_heatmap_over_env(state_to_value, save_name=get_save_path(f'{prefix}_values.pdf', save_dir))
+    env.plot_heatmap_over_env(state_to_value, save_name=get_save_path(f'{prefix}_values.png', save_dir))
+    cmap = plt.get_cmap('viridis')
+    env.plot_heatmap_over_env(state_to_policy, save_name=get_save_path(f'{prefix}_policy.pdf', save_dir), colormap=cmap)
+    env.plot_heatmap_over_env(state_to_policy, save_name=get_save_path(f'{prefix}_policy.png', save_dir), colormap=cmap)
+
+    return {
+        'state': state_rsa,
+        'conv': conv_rsa,
+        'shared_1': shared_1_rsa,
+        'shared_2': shared_2_rsa,
+        'reprs': {
+            'state': state_reprs,
+            'conv': conv_reprs,
+            'shared_1': shared_reprs_1,
+            'shared_2': shared_reprs_2
+        },
+        'state_to_value': state_to_value,
+        'state_to_policy': state_to_policy
+    }
+
+
+# =============================================================================
 # Comparison Plotting Functions
 # =============================================================================
 
@@ -633,56 +727,69 @@ def plot_dqn_ppo_comparison(
     ppo_init_hom_sims: Dict,
     ppo_policy_sims: Dict,
     ppo_init_policy_sims: Dict,
+    sarsa_hom_sims: Optional[Dict] = None,
+    sarsa_init_hom_sims: Optional[Dict] = None,
+    sarsa_policy_sims: Optional[Dict] = None,
+    sarsa_init_policy_sims: Optional[Dict] = None,
     save_dir: str = DEFAULT_SAVE_DIR,
     color_global: str = '#009988',
     color_local: str = '#EE7733'
 ) -> Tuple[plt.Figure, plt.Figure]:
-    """Create comparison plots for DQN and PPO models side by side."""
+    """Create comparison plots for DQN, PPO, and optionally SARSA models side by side."""
     dqn_labels = ['Pixels', 'Conv', 'FC1', 'FC2']
     dqn_keys = ['state', 'conv', 'shared_1', 'shared_2']
     ppo_labels = ['Pixels', 'Conv', 'FC1', 'Actor', 'Critic']
     ppo_keys = ['state', 'conv', 'shared', 'actor', 'critic']
+    sarsa_labels = ['Pixels', 'Conv', 'FC1', 'FC2']
+    sarsa_keys = ['state', 'conv', 'shared_1', 'shared_2']
 
+    include_sarsa = sarsa_hom_sims is not None
+    n_cols = 3 if include_sarsa else 2
+    fig_width = 4.5 if include_sarsa else 3.0
     offset = 0.2
 
+    def _scatter_model(ax, x, init_global, trained_global, init_local, trained_local, labels, legend=False):
+        ax.scatter(x - offset, init_global, color=color_global, marker='o', s=15, alpha=0.8,
+                   label='Global (init)' if legend else None)
+        ax.scatter(x + offset, trained_global, color=color_global, marker='s', s=15, alpha=0.8,
+                   label='Global (trained)' if legend else None)
+        ax.scatter(x - offset, init_local, color=color_local, marker='o', s=15, alpha=0.8,
+                   label='Within-label (init)' if legend else None)
+        ax.scatter(x + offset, trained_local, color=color_local, marker='s', s=15, alpha=0.8,
+                   label='Within-label (trained)' if legend else None)
+        for i in range(len(x)):
+            ax.plot([x[i] - offset, x[i] + offset], [init_global[i], trained_global[i]],
+                    color_global, alpha=0.5, linewidth=1)
+            ax.plot([x[i] - offset, x[i] + offset], [init_local[i], trained_local[i]],
+                    color_local, alpha=0.5, linewidth=1)
+
     # Figure 1: MDP Abstractions
-    fig1, axs1 = plt.subplots(1, 2, figsize=(3.0, 1.2), sharey=True)
+    fig1, axs1 = plt.subplots(1, n_cols, figsize=(fig_width, 1.2), sharey=True)
 
     x_dqn = np.arange(len(dqn_labels))
-    dqn_global_hom = [abs(dqn_hom_sims[k][0]) for k in dqn_keys]
-    dqn_local_hom = [abs(dqn_hom_sims[k][1]) for k in dqn_keys]
-    dqn_init_global_hom = [abs(dqn_init_hom_sims[k][0]) for k in dqn_keys]
-    dqn_init_local_hom = [abs(dqn_init_hom_sims[k][1]) for k in dqn_keys]
-
-    axs1[0].scatter(x_dqn - offset, dqn_init_global_hom, color=color_global, marker='o', s=15, alpha=0.8)
-    axs1[0].scatter(x_dqn + offset, dqn_global_hom, color=color_global, marker='s', s=15, alpha=0.8)
-    axs1[0].scatter(x_dqn - offset, dqn_init_local_hom, color=color_local, marker='o', s=15, alpha=0.8)
-    axs1[0].scatter(x_dqn + offset, dqn_local_hom, color=color_local, marker='s', s=15, alpha=0.8)
-    for i in range(len(dqn_labels)):
-        axs1[0].plot([x_dqn[i] - offset, x_dqn[i] + offset],
-                     [dqn_init_global_hom[i], dqn_global_hom[i]], color_global, alpha=0.5, linewidth=1)
-        axs1[0].plot([x_dqn[i] - offset, x_dqn[i] + offset],
-                     [dqn_init_local_hom[i], dqn_local_hom[i]], color_local, alpha=0.5, linewidth=1)
+    _scatter_model(axs1[0], x_dqn,
+                   [abs(dqn_init_hom_sims[k][0]) for k in dqn_keys],
+                   [abs(dqn_hom_sims[k][0]) for k in dqn_keys],
+                   [abs(dqn_init_hom_sims[k][1]) for k in dqn_keys],
+                   [abs(dqn_hom_sims[k][1]) for k in dqn_keys],
+                   dqn_labels)
 
     x_ppo = np.arange(len(ppo_labels))
-    ppo_global_hom = [abs(ppo_hom_sims[k][0]) for k in ppo_keys]
-    ppo_local_hom = [abs(ppo_hom_sims[k][1]) for k in ppo_keys]
-    ppo_init_global_hom = [abs(ppo_init_hom_sims[k][0]) for k in ppo_keys]
-    ppo_init_local_hom = [abs(ppo_init_hom_sims[k][1]) for k in ppo_keys]
+    _scatter_model(axs1[1], x_ppo,
+                   [abs(ppo_init_hom_sims[k][0]) for k in ppo_keys],
+                   [abs(ppo_hom_sims[k][0]) for k in ppo_keys],
+                   [abs(ppo_init_hom_sims[k][1]) for k in ppo_keys],
+                   [abs(ppo_hom_sims[k][1]) for k in ppo_keys],
+                   ppo_labels, legend=True)
 
-    axs1[1].scatter(x_ppo - offset, ppo_init_global_hom, color=color_global, marker='o', s=15,
-                    label='Global (init)', alpha=0.8)
-    axs1[1].scatter(x_ppo + offset, ppo_global_hom, color=color_global, marker='s', s=15,
-                    label='Global (trained)', alpha=0.8)
-    axs1[1].scatter(x_ppo - offset, ppo_init_local_hom, color=color_local, marker='o', s=15,
-                    label='Within-label (init)', alpha=0.8)
-    axs1[1].scatter(x_ppo + offset, ppo_local_hom, color=color_local, marker='s', s=15,
-                    label='Within-label (trained)', alpha=0.8)
-    for i in range(len(ppo_labels)):
-        axs1[1].plot([x_ppo[i] - offset, x_ppo[i] + offset],
-                     [ppo_init_global_hom[i], ppo_global_hom[i]], color_global, alpha=0.5, linewidth=1)
-        axs1[1].plot([x_ppo[i] - offset, x_ppo[i] + offset],
-                     [ppo_init_local_hom[i], ppo_local_hom[i]], color_local, alpha=0.5, linewidth=1)
+    if include_sarsa:
+        x_sarsa = np.arange(len(sarsa_labels))
+        _scatter_model(axs1[2], x_sarsa,
+                       [abs(sarsa_init_hom_sims[k][0]) for k in sarsa_keys],
+                       [abs(sarsa_hom_sims[k][0]) for k in sarsa_keys],
+                       [abs(sarsa_init_hom_sims[k][1]) for k in sarsa_keys],
+                       [abs(sarsa_hom_sims[k][1]) for k in sarsa_keys],
+                       sarsa_labels)
 
     axs1[0].set_ylabel('Cosine Sim.', fontsize=8)
     axs1[0].set_xticks(x_dqn)
@@ -693,46 +800,38 @@ def plot_dqn_ppo_comparison(
     axs1[1].tick_params(axis='y', labelsize=8)
     axs1[0].set_ylim(-0.1, 1.0)
     axs1[1].legend(frameon=False, fontsize=6, loc=(0.01, 0.4))
+    if include_sarsa:
+        axs1[2].set_xticks(x_sarsa)
+        axs1[2].set_xticklabels(sarsa_labels, fontsize=8, rotation=45)
+        axs1[2].tick_params(axis='y', labelsize=8)
 
     sns.despine()
     fig1.savefig(get_save_path('mdp_abstractions.pdf', save_dir), transparent=True, bbox_inches='tight')
 
     # Figure 2: Policy Abstractions
-    fig2, axs2 = plt.subplots(1, 2, figsize=(3.0, 1.2), sharey=True)
+    fig2, axs2 = plt.subplots(1, n_cols, figsize=(fig_width, 1.2), sharey=True)
 
-    dqn_global_policy = [abs(dqn_policy_sims[k][0]) for k in dqn_keys]
-    dqn_local_policy = [abs(dqn_policy_sims[k][1]) for k in dqn_keys]
-    dqn_init_global_policy = [abs(dqn_init_policy_sims[k][0]) for k in dqn_keys]
-    dqn_init_local_policy = [abs(dqn_init_policy_sims[k][1]) for k in dqn_keys]
+    _scatter_model(axs2[0], x_dqn,
+                   [abs(dqn_init_policy_sims[k][0]) for k in dqn_keys],
+                   [abs(dqn_policy_sims[k][0]) for k in dqn_keys],
+                   [abs(dqn_init_policy_sims[k][1]) for k in dqn_keys],
+                   [abs(dqn_policy_sims[k][1]) for k in dqn_keys],
+                   dqn_labels)
 
-    axs2[0].scatter(x_dqn - offset, dqn_init_global_policy, color=color_global, marker='o', s=15, alpha=0.8)
-    axs2[0].scatter(x_dqn + offset, dqn_global_policy, color=color_global, marker='s', s=15, alpha=0.8)
-    axs2[0].scatter(x_dqn - offset, dqn_init_local_policy, color=color_local, marker='o', s=15, alpha=0.8)
-    axs2[0].scatter(x_dqn + offset, dqn_local_policy, color=color_local, marker='s', s=15, alpha=0.8)
-    for i in range(len(dqn_labels)):
-        axs2[0].plot([x_dqn[i] - offset, x_dqn[i] + offset],
-                     [dqn_init_global_policy[i], dqn_global_policy[i]], color_global, alpha=0.5, linewidth=1)
-        axs2[0].plot([x_dqn[i] - offset, x_dqn[i] + offset],
-                     [dqn_init_local_policy[i], dqn_local_policy[i]], color_local, alpha=0.5, linewidth=1)
+    _scatter_model(axs2[1], x_ppo,
+                   [abs(ppo_init_policy_sims[k][0]) for k in ppo_keys],
+                   [abs(ppo_policy_sims[k][0]) for k in ppo_keys],
+                   [abs(ppo_init_policy_sims[k][1]) for k in ppo_keys],
+                   [abs(ppo_policy_sims[k][1]) for k in ppo_keys],
+                   ppo_labels, legend=True)
 
-    ppo_global_policy = [abs(ppo_policy_sims[k][0]) for k in ppo_keys]
-    ppo_local_policy = [abs(ppo_policy_sims[k][1]) for k in ppo_keys]
-    ppo_init_global_policy = [abs(ppo_init_policy_sims[k][0]) for k in ppo_keys]
-    ppo_init_local_policy = [abs(ppo_init_policy_sims[k][1]) for k in ppo_keys]
-
-    axs2[1].scatter(x_ppo - offset, ppo_init_global_policy, color=color_global, marker='o', s=15,
-                    label='Global (init)', alpha=0.8)
-    axs2[1].scatter(x_ppo + offset, ppo_global_policy, color=color_global, marker='s', s=15,
-                    label='Global (trained)', alpha=0.8)
-    axs2[1].scatter(x_ppo - offset, ppo_init_local_policy, color=color_local, marker='o', s=15,
-                    label='Within-label (init)', alpha=0.8)
-    axs2[1].scatter(x_ppo + offset, ppo_local_policy, color=color_local, marker='s', s=15,
-                    label='Within-label (trained)', alpha=0.8)
-    for i in range(len(ppo_labels)):
-        axs2[1].plot([x_ppo[i] - offset, x_ppo[i] + offset],
-                     [ppo_init_global_policy[i], ppo_global_policy[i]], color_global, alpha=0.5, linewidth=1)
-        axs2[1].plot([x_ppo[i] - offset, x_ppo[i] + offset],
-                     [ppo_init_local_policy[i], ppo_local_policy[i]], color_local, alpha=0.5, linewidth=1)
+    if include_sarsa:
+        _scatter_model(axs2[2], x_sarsa,
+                       [abs(sarsa_init_policy_sims[k][0]) for k in sarsa_keys],
+                       [abs(sarsa_policy_sims[k][0]) for k in sarsa_keys],
+                       [abs(sarsa_init_policy_sims[k][1]) for k in sarsa_keys],
+                       [abs(sarsa_policy_sims[k][1]) for k in sarsa_keys],
+                       sarsa_labels)
 
     axs2[0].set_ylabel('Cosine Sim.', fontsize=8)
     axs2[0].set_title('DQN', fontsize=10)
@@ -744,6 +843,11 @@ def plot_dqn_ppo_comparison(
     axs2[0].tick_params(axis='y', labelsize=8)
     axs2[1].tick_params(axis='y', labelsize=8)
     axs2[0].set_ylim(-0.1, 1.0)
+    if include_sarsa:
+        axs2[2].set_title('SARSA-λ', fontsize=10)
+        axs2[2].set_xticks(x_sarsa)
+        axs2[2].set_xticklabels(sarsa_labels, fontsize=8, rotation=45)
+        axs2[2].tick_params(axis='y', labelsize=8)
 
     sns.despine()
     fig2.savefig(get_save_path('policy_abstractions.pdf', save_dir), transparent=True, bbox_inches='tight')
@@ -1260,6 +1364,30 @@ def run_analysis(save_dir: str = DEFAULT_SAVE_DIR, show_plots: bool = False):
     ppo_model._net.eval()
 
     # -------------------------------------------------------------------------
+    # Create and load SARSA-λ models
+    # -------------------------------------------------------------------------
+    print("Loading SARSA-λ models...")
+    sarsa_results_path = "../sac/seb_runs/sarsa-run"
+
+    sarsa_model = deep_sarsa.DeepSARSALambda(
+        sample_state=ppo_sample_state,
+        num_actions=ppo_num_actions,
+        learning_rate=0.0001,
+        discount_factor=0.99,
+        exploration_rate=0.01,
+        exploration_decay=1.0,
+        lambda_=0.8,
+        convolutional=True,
+        optimistic_init=0.0,
+    )
+    sarsa_init_model = deepcopy(sarsa_model)
+
+    # Load trained SARSA-λ
+    model_dict = torch.load(f"{sarsa_results_path}/deep_sarsa_lambda_model_500.pth", weights_only=False)
+    sarsa_model._net.load_state_dict(model_dict["model_state_dict"])
+    sarsa_model._net.eval()
+
+    # -------------------------------------------------------------------------
     # Extract representations and compute RSAs
     # -------------------------------------------------------------------------
     print("\nExtracting DQN init representations...")
@@ -1277,6 +1405,14 @@ def run_analysis(save_dir: str = DEFAULT_SAVE_DIR, show_plots: bool = False):
     print("\nExtracting PPO trained representations...")
     ppo_rsas = accumulate_ppo_representations(ppo_model, ppo_env, ppo_state_shape,
                                                save_dir=save_dir, prefix='ppo_trained', show=show_plots)
+
+    print("\nExtracting SARSA-λ init representations...")
+    sarsa_init_rsas = accumulate_sarsa_representations(sarsa_init_model, ppo_env, ppo_state_shape,
+                                                       save_dir=save_dir, prefix='sarsa_init', show=show_plots)
+
+    print("\nExtracting SARSA-λ trained representations...")
+    sarsa_rsas = accumulate_sarsa_representations(sarsa_model, ppo_env, ppo_state_shape,
+                                                  save_dir=save_dir, prefix='sarsa_trained', show=show_plots)
 
     # -------------------------------------------------------------------------
     # Compute similarity metrics
@@ -1305,16 +1441,22 @@ def run_analysis(save_dir: str = DEFAULT_SAVE_DIR, show_plots: bool = False):
     dqn_init_policy_sims = compute_sims_for_rsas(dqn_init_rsas, dqn_init_rsas['reprs'], dqn_state_to_opt_policy, dqn_state_id_mapping)
     ppo_policy_sims = compute_sims_for_rsas(ppo_rsas, ppo_rsas['reprs'], ppo_state_to_opt_policy, ppo_state_id_mapping)
     ppo_init_policy_sims = compute_sims_for_rsas(ppo_init_rsas, ppo_init_rsas['reprs'], ppo_state_to_opt_policy, ppo_state_id_mapping)
+    sarsa_hom_sims = compute_sims_for_rsas(sarsa_rsas, sarsa_rsas['reprs'], ppo_state_to_label, ppo_state_id_mapping)
+    sarsa_init_hom_sims = compute_sims_for_rsas(sarsa_init_rsas, sarsa_init_rsas['reprs'], ppo_state_to_label, ppo_state_id_mapping)
+    sarsa_policy_sims = compute_sims_for_rsas(sarsa_rsas, sarsa_rsas['reprs'], ppo_state_to_opt_policy, ppo_state_id_mapping)
+    sarsa_init_policy_sims = compute_sims_for_rsas(sarsa_init_rsas, sarsa_init_rsas['reprs'], ppo_state_to_opt_policy, ppo_state_id_mapping)
 
     # -------------------------------------------------------------------------
     # Generate comparison plots
     # -------------------------------------------------------------------------
     print("\nGenerating comparison plots...")
 
-    # Combined DQN/PPO comparison
+    # Combined DQN/PPO/SARSA comparison
     plot_dqn_ppo_comparison(
         dqn_hom_sims, dqn_init_hom_sims, dqn_policy_sims, dqn_init_policy_sims,
         ppo_hom_sims, ppo_init_hom_sims, ppo_policy_sims, ppo_init_policy_sims,
+        sarsa_hom_sims=sarsa_hom_sims, sarsa_init_hom_sims=sarsa_init_hom_sims,
+        sarsa_policy_sims=sarsa_policy_sims, sarsa_init_policy_sims=sarsa_init_policy_sims,
         save_dir=save_dir
     )
 
@@ -1332,6 +1474,14 @@ def run_analysis(save_dir: str = DEFAULT_SAVE_DIR, show_plots: bool = False):
         layer_labels=['State', 'Conv', 'FC1', 'Actor', 'Critic'],
         layer_keys=['state', 'conv', 'shared', 'actor', 'critic'],
         model_name='PPO',
+        save_dir=save_dir
+    )
+
+    plot_single_model_comparison(
+        sarsa_hom_sims, sarsa_init_hom_sims, sarsa_policy_sims, sarsa_init_policy_sims,
+        layer_labels=['State', 'Conv', 'FC1', 'FC2'],
+        layer_keys=['state', 'conv', 'shared_1', 'shared_2'],
+        model_name='SARSA',
         save_dir=save_dir
     )
 
@@ -1394,6 +1544,35 @@ def run_analysis(save_dir: str = DEFAULT_SAVE_DIR, show_plots: bool = False):
         layer_labels=['Pixels', 'Conv', 'FC1', 'Actor', 'Critic'],
         layer_keys=['state', 'conv', 'shared', 'actor', 'critic'],
         model_name='PPO',
+        save_dir=save_dir,
+        show=show_plots
+    )
+
+    # SARSA-λ depth-wise analysis (trained model)
+    plot_similarity_vs_depth(
+        reprs_dict=sarsa_rsas['reprs'],
+        state_to_depth=ppo_state_to_depth,
+        state_to_mdp_label=ppo_state_to_label,
+        state_to_policy_label=ppo_state_to_opt_policy,
+        state_id_mapping=ppo_state_id_mapping,
+        layer_labels=['Pixels', 'Conv', 'FC1', 'FC2'],
+        layer_keys=['state', 'conv', 'shared_1', 'shared_2'],
+        model_name='SARSA_trained',
+        save_dir=save_dir,
+        show=show_plots
+    )
+
+    # SARSA-λ combined (trained vs init)
+    plot_similarity_vs_depth_combined(
+        trained_reprs_dict=sarsa_rsas['reprs'],
+        init_reprs_dict=sarsa_init_rsas['reprs'],
+        state_to_depth=ppo_state_to_depth,
+        state_to_mdp_label=ppo_state_to_label,
+        state_to_policy_label=ppo_state_to_opt_policy,
+        state_id_mapping=ppo_state_id_mapping,
+        layer_labels=['Pixels', 'Conv', 'FC1', 'FC2'],
+        layer_keys=['state', 'conv', 'shared_1', 'shared_2'],
+        model_name='SARSA',
         save_dir=save_dir,
         show=show_plots
     )
