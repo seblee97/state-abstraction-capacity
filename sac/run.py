@@ -9,12 +9,13 @@ from sac.models import (
     deep_sarsa,
 )
 from sac.trainers import episodic_trainer, ppo_trainer
-from sac import utils
+from sac import utils, potential_shaping_env
 from key_door import key_door_env, visualisation_env
 import argparse
 import numpy as np
 import torch
 import os
+import yaml
 from datetime import datetime
 import random
 
@@ -321,6 +322,13 @@ parser.add_argument(
     help="Eligibility trace decay parameter λ for SARSA(λ).",
 )
 parser.add_argument(
+    "-shape",
+    "--shaping_scale",
+    type=float,
+    default=0.0,
+    help="Potential-based shaping scale. 0 disables shaping. Goal is taken from reward_positions[0].",
+)
+parser.add_argument(
     "-es",
     "--early_stop_episodes",
     type=int,
@@ -350,6 +358,9 @@ def setup_environment(
     test_map_yaml_path: str,
     episode_timeout: int,
     representation: str,
+    shaping_scale: float = 0.0,
+    shaping_goal: tuple = None,
+    discount_factor: float = 0.99,
 ):
     train_env = key_door_env.KeyDoorEnv(
         map_ascii_path=map_path,
@@ -358,6 +369,14 @@ def setup_environment(
         episode_timeout=episode_timeout,
     )
     train_env = visualisation_env.VisualisationEnv(train_env)
+    if shaping_scale > 0.0 and shaping_goal is not None:
+        train_env = potential_shaping_env.PotentialShapingEnv(
+            env=train_env,
+            goal=shaping_goal,
+            shaping_scale=shaping_scale,
+            gamma=discount_factor,
+            map_ascii_path=map_path,
+        )
 
     test_env = key_door_env.KeyDoorEnv(
         map_ascii_path=map_path,
@@ -558,12 +577,22 @@ if __name__ == "__main__":
     map_path = os.path.join(current_dir, "maps", args.map_name)
     map_yaml_path = os.path.join(current_dir, "maps", args.map_yaml_filename)
     test_map_yaml_path = os.path.join(current_dir, "maps", args.test_map_yaml_filename)
+
+    shaping_goal = None
+    if args.shaping_scale > 0.0:
+        with open(map_yaml_path) as f:
+            map_data = yaml.safe_load(f)
+        shaping_goal = tuple(map_data["reward_positions"][0])
+
     train_env, test_env = setup_environment(
         map_path=map_path,
         map_yaml_path=map_yaml_path,
         test_map_yaml_path=test_map_yaml_path,
         episode_timeout=args.episode_timeout,
         representation=args.representation,
+        shaping_scale=args.shaping_scale,
+        shaping_goal=shaping_goal,
+        discount_factor=args.discount_factor,
     )
     model = setup_model(
         model_type=args.model,
