@@ -1,4 +1,13 @@
-from sac.models import q_learning, quotient_q_learning, ppo, dqn, a2c, dsr, qrdqn
+from sac.models import (
+    q_learning,
+    quotient_q_learning,
+    ppo,
+    dqn,
+    a2c,
+    dsr,
+    qrdqn,
+    deep_sarsa,
+)
 from sac.trainers import episodic_trainer, ppo_trainer
 from sac import utils
 from key_door import key_door_env, visualisation_env
@@ -31,7 +40,17 @@ parser.add_argument(
     "--model",
     type=str,
     default="q_learning",
-    choices=["q_learning", "quotient_q_learning", "ppo", "dqn", "a2c", "dsr", "qrdqn"],
+    choices=[
+        "q_learning",
+        "quotient_q_learning",
+        "ppo",
+        "dqn",
+        "a2c",
+        "dsr",
+        "qrdqn",
+        "deep_sarsa",
+        "deep_sarsa_lambda",
+    ],
     help="Model to use for training.",
 )
 parser.add_argument(
@@ -214,7 +233,7 @@ parser.add_argument(
     "-test_map_yaml",
     "--test_map_yaml_filename",
     type=str,
-    default="meister_trimmed.yaml",
+    default="test_meister_trimmed.yaml",
     help="Name of map YAML file for test in maps folder.",
 )
 parser.add_argument(
@@ -286,6 +305,20 @@ parser.add_argument(
     type=float,
     default=None,
     help="Gradient clipping norm for QRDQN (None for no clipping).",
+)
+parser.add_argument(
+    "-lam",
+    "--lambda_",
+    type=float,
+    default=0.8,
+    help="Eligibility trace decay parameter λ for SARSA(λ).",
+)
+parser.add_argument(
+    "-es",
+    "--early_stop_episodes",
+    type=int,
+    default=0,
+    help="Stop training if test reward is still 0 after this many episodes (0 to disable).",
 )
 
 
@@ -459,6 +492,35 @@ def setup_model(model_type: str, env):
             weight_decay=args.weight_decay,
             max_grad_norm=args.qrdqn_grad_clip,
         )
+    elif model_type == "deep_sarsa":
+        sample_state = env.reset_environment()
+        num_actions = len(action_space)
+        return deep_sarsa.DeepSARSA(
+            sample_state=sample_state,
+            num_actions=num_actions,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            exploration_rate=args.exploration_rate,
+            exploration_decay=args.exploration_decay,
+            target_update_frequency=args.target_update_frequency,
+            convolutional=args.convolutional,
+            optimistic_init=args.optimistic_init,
+            weight_decay=args.weight_decay,
+        )
+    elif model_type == "deep_sarsa_lambda":
+        sample_state = env.reset_environment()
+        num_actions = len(action_space)
+        return deep_sarsa.DeepSARSALambda(
+            sample_state=sample_state,
+            num_actions=num_actions,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            exploration_rate=args.exploration_rate,
+            exploration_decay=args.exploration_decay,
+            lambda_=args.lambda_,
+            convolutional=args.convolutional,
+            optimistic_init=args.optimistic_init,
+        )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -508,6 +570,8 @@ if __name__ == "__main__":
         "dqn",
         "dsr",
         "qrdqn",
+        "deep_sarsa",
+        "deep_sarsa_lambda",
     ]:
         episodic_trainer.train(
             model=model,
@@ -519,6 +583,7 @@ if __name__ == "__main__":
             save_model_frequency=args.save_model_frequency,
             visualisation_frequency=args.visualisation_frequency,
             experiment_dir=experiment_dir,
+            early_stop_episodes=args.early_stop_episodes,
         )
     elif args.model == "ppo":
         ppo_trainer.train(

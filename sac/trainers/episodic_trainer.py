@@ -16,6 +16,7 @@ def train(
     save_model_frequency,
     visualisation_frequency,
     experiment_dir,
+    early_stop_episodes: int = 0,
 ):
 
     episode_lengths = []
@@ -67,6 +68,11 @@ def train(
             test_episode_rewards.append(test_reward)
             test_episode_lengths.append(test_episode_length)
             latest_test_reward = test_reward
+
+            if early_stop_episodes > 0 and i >= early_stop_episodes:
+                if all(r == 0 for r in test_episode_rewards):
+                    pbar.write(f"Early stopping at episode {i}: no test reward found in {early_stop_episodes} episodes.")
+                    break
         if i % visualisation_frequency == 0:
             train_env.visualise_episode_history(
                 save_path=os.path.join(
@@ -82,6 +88,14 @@ def train(
             )
         if i % save_model_frequency == 0:
             model.save_model(experiment_dir, i)
+            np.savez(
+                os.path.join(experiment_dir, "training_stats.npz"),
+                episode_lengths=episode_lengths,
+                episode_rewards=episode_rewards,
+                test_episode_lengths=test_episode_lengths,
+                test_episode_rewards=test_episode_rewards,
+                episode_losses=episode_losses,
+            )
 
         episode_lengths.append(episode_length)
         episode_rewards.append(episode_reward)
