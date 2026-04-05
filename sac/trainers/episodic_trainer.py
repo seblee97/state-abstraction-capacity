@@ -23,6 +23,7 @@ def train(
     episode_lengths = []
     episode_rewards = []
     episode_losses = []
+    episode_epsilons = []
 
     test_episode_lengths = []
     test_episode_rewards = []
@@ -97,6 +98,7 @@ def train(
                 test_episode_lengths=test_episode_lengths,
                 test_episode_rewards=test_episode_rewards,
                 episode_losses=episode_losses,
+                episode_epsilons=episode_epsilons,
             )
 
         if hasattr(model, 'decay_epsilon'):
@@ -105,6 +107,9 @@ def train(
         episode_lengths.append(episode_length)
         episode_rewards.append(episode_reward)
         episode_losses.append(episode_loss / episode_length)
+        episode_epsilons.append(
+            model._exploration_rate if hasattr(model, '_exploration_rate') else np.nan
+        )
         latest_train_loss = episode_loss / episode_length
 
         # Update tqdm display with latest metrics
