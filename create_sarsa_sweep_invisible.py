@@ -73,7 +73,7 @@ for lr, eps_decay, ns in itertools.product(lrs, eps_decays, n_steps_list):
             f" -map_yaml shaped_meister_trimmed.yaml"
             f" -test_map_yaml test_meister_trimmed.yaml"
             f" -lr {lr}"
-            f" -ns {ns}"
+            f" -nstep {ns}"
             f" -timeout {timeout}"
             f" -eps {eps}"
             f" -eps_decay {eps_decay}"

@@ -128,7 +128,7 @@ parser.add_argument(
     help="Frequency of updating the target network (for DQN).",
 )
 parser.add_argument(
-    "-ns",
+    "-nstep",
     "--n_steps",
     type=int,
     default=10,
