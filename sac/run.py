@@ -9,12 +9,13 @@ from sac.models import (
     deep_sarsa,
 )
 from sac.trainers import episodic_trainer, ppo_trainer
-from sac import utils
+from sac import utils, potential_shaping_env, invisible_reward_env
 from key_door import key_door_env, visualisation_env
 import argparse
 import numpy as np
 import torch
 import os
+import yaml
 from datetime import datetime
 import random
 
@@ -50,6 +51,7 @@ parser.add_argument(
         "qrdqn",
         "deep_sarsa",
         "deep_sarsa_lambda",
+        "deep_sarsa_n",
     ],
     help="Model to use for training.",
 )
@@ -124,6 +126,13 @@ parser.add_argument(
     type=int,
     default=50,
     help="Frequency of updating the target network (for DQN).",
+)
+parser.add_argument(
+    "-nstep",
+    "--n_steps",
+    type=int,
+    default=10,
+    help="Number of steps for n-step SARSA return.",
 )
 parser.add_argument(
     "-rbs",
@@ -207,6 +216,13 @@ parser.add_argument(
     type=int,
     default=50,
     help="Frequency of saving the model (weights or table) during training.",
+)
+parser.add_argument(
+    "-save_stats",
+    "--save_stats_frequency",
+    type=int,
+    default=500,
+    help="Frequency of saving training stats to npz during training.",
 )
 parser.add_argument(
     "-viz",
@@ -314,6 +330,19 @@ parser.add_argument(
     help="Eligibility trace decay parameter λ for SARSA(λ).",
 )
 parser.add_argument(
+    "-invis",
+    "--invisible_rewards",
+    action="store_true",
+    help="Suppress visual rendering of intermediate reward positions in train env pixel observations.",
+)
+parser.add_argument(
+    "-shape",
+    "--shaping_scale",
+    type=float,
+    default=0.0,
+    help="Potential-based shaping scale. 0 disables shaping. Goal is taken from reward_positions[0].",
+)
+parser.add_argument(
     "-es",
     "--early_stop_episodes",
     type=int,
@@ -343,6 +372,10 @@ def setup_environment(
     test_map_yaml_path: str,
     episode_timeout: int,
     representation: str,
+    shaping_scale: float = 0.0,
+    shaping_goal: tuple = None,
+    discount_factor: float = 0.99,
+    invisible_positions: list = None,
 ):
     train_env = key_door_env.KeyDoorEnv(
         map_ascii_path=map_path,
@@ -350,7 +383,20 @@ def setup_environment(
         representation=representation,
         episode_timeout=episode_timeout,
     )
+    if invisible_positions:
+        train_env = invisible_reward_env.InvisibleRewardEnv(
+            env=train_env,
+            invisible_positions=invisible_positions,
+        )
     train_env = visualisation_env.VisualisationEnv(train_env)
+    if shaping_scale > 0.0 and shaping_goal is not None:
+        train_env = potential_shaping_env.PotentialShapingEnv(
+            env=train_env,
+            goal=shaping_goal,
+            shaping_scale=shaping_scale,
+            gamma=discount_factor,
+            map_ascii_path=map_path,
+        )
 
     test_env = key_door_env.KeyDoorEnv(
         map_ascii_path=map_path,
@@ -521,6 +567,22 @@ def setup_model(model_type: str, env):
             convolutional=args.convolutional,
             optimistic_init=args.optimistic_init,
         )
+    elif model_type == "deep_sarsa_n":
+        sample_state = env.reset_environment()
+        num_actions = len(action_space)
+        return deep_sarsa.DeepSARSAN(
+            sample_state=sample_state,
+            num_actions=num_actions,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            exploration_rate=args.exploration_rate,
+            exploration_decay=args.exploration_decay,
+            n_steps=args.n_steps,
+            target_update_frequency=args.target_update_frequency,
+            convolutional=args.convolutional,
+            optimistic_init=args.optimistic_init,
+            weight_decay=args.weight_decay,
+        )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -551,12 +613,27 @@ if __name__ == "__main__":
     map_path = os.path.join(current_dir, "maps", args.map_name)
     map_yaml_path = os.path.join(current_dir, "maps", args.map_yaml_filename)
     test_map_yaml_path = os.path.join(current_dir, "maps", args.test_map_yaml_filename)
+
+    shaping_goal = None
+    invisible_positions = None
+    if args.shaping_scale > 0.0 or args.invisible_rewards:
+        with open(map_yaml_path) as f:
+            map_data = yaml.safe_load(f)
+        reward_positions = map_data["reward_positions"]
+        shaping_goal = tuple(reward_positions[-1])
+        if args.invisible_rewards and len(reward_positions) > 1:
+            invisible_positions = [tuple(p) for p in reward_positions[:-1]]
+
     train_env, test_env = setup_environment(
         map_path=map_path,
         map_yaml_path=map_yaml_path,
         test_map_yaml_path=test_map_yaml_path,
         episode_timeout=args.episode_timeout,
         representation=args.representation,
+        shaping_scale=args.shaping_scale,
+        shaping_goal=shaping_goal,
+        discount_factor=args.discount_factor,
+        invisible_positions=invisible_positions,
     )
     model = setup_model(
         model_type=args.model,
@@ -572,6 +649,7 @@ if __name__ == "__main__":
         "qrdqn",
         "deep_sarsa",
         "deep_sarsa_lambda",
+        "deep_sarsa_n",
     ]:
         episodic_trainer.train(
             model=model,
@@ -584,6 +662,7 @@ if __name__ == "__main__":
             visualisation_frequency=args.visualisation_frequency,
             experiment_dir=experiment_dir,
             early_stop_episodes=args.early_stop_episodes,
+            save_stats_frequency=args.save_stats_frequency,
         )
     elif args.model == "ppo":
         ppo_trainer.train(

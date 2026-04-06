@@ -17,11 +17,13 @@ def train(
     visualisation_frequency,
     experiment_dir,
     early_stop_episodes: int = 0,
+    save_stats_frequency: int = 500,
 ):
 
     episode_lengths = []
     episode_rewards = []
     episode_losses = []
+    episode_epsilons = []
 
     test_episode_lengths = []
     test_episode_rewards = []
@@ -88,6 +90,7 @@ def train(
             )
         if i % save_model_frequency == 0:
             model.save_model(experiment_dir, i)
+        if i % save_stats_frequency == 0:
             np.savez(
                 os.path.join(experiment_dir, "training_stats.npz"),
                 episode_lengths=episode_lengths,
@@ -95,11 +98,18 @@ def train(
                 test_episode_lengths=test_episode_lengths,
                 test_episode_rewards=test_episode_rewards,
                 episode_losses=episode_losses,
+                episode_epsilons=episode_epsilons,
             )
+
+        if hasattr(model, 'decay_epsilon'):
+            model.decay_epsilon()
 
         episode_lengths.append(episode_length)
         episode_rewards.append(episode_reward)
         episode_losses.append(episode_loss / episode_length)
+        episode_epsilons.append(
+            model._exploration_rate if hasattr(model, '_exploration_rate') else np.nan
+        )
         latest_train_loss = episode_loss / episode_length
 
         # Update tqdm display with latest metrics
@@ -124,13 +134,16 @@ def train(
     )
 
 
-def test(model, env, episode_timeout):
+def test(model, env, episode_timeout, epsilon=0.05):
     state_ = env.reset_environment(train=False)
     state = state_[:2]
     total_reward = 0
     episode_length = 0
     for step in range(episode_timeout):
-        action = model.select_greedy_action(state)
+        if np.random.rand() < epsilon:
+            action = np.random.choice(env.action_space)
+        else:
+            action = model.select_greedy_action(state)
         reward, next_state_ = env.step(action)
         next_state = next_state_[:2]
         total_reward += reward

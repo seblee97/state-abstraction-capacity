@@ -176,11 +176,12 @@ class DeepSARSA(base.BaseModel):
         if self._use_target and self._step_count % self._target_update_frequency == 0:
             self._target_net.load_state_dict(self._net.state_dict())
 
+        return {"loss": loss.item()}
+
+    def decay_epsilon(self):
         self._exploration_rate = max(
             self._exploration_rate * self._exploration_decay, 0.01
         )
-
-        return {"loss": loss.item()}
 
     def save_model(self, path, episode):
         save_path = os.path.join(path, f"deep_sarsa_model_{episode}.pth")
@@ -339,18 +340,196 @@ class DeepSARSALambda(base.BaseModel):
         if not active:
             self._reset_traces()
 
-        self._exploration_rate = max(
-            self._exploration_rate * self._exploration_decay, 0.01
-        )
         self._step_count += 1
 
         return {"loss": delta ** 2}
+
+    def decay_epsilon(self):
+        self._exploration_rate = max(
+            self._exploration_rate * self._exploration_decay, 0.01
+        )
 
     def save_model(self, path, episode):
         save_path = os.path.join(path, f"deep_sarsa_lambda_model_{episode}.pth")
         torch.save(
             {
                 "model_state_dict": self._net.state_dict(),
+                "step_count": self._step_count,
+            },
+            save_path,
+        )
+
+
+class DeepSARSAN(base.BaseModel):
+    """
+    Online n-step Deep SARSA with Adam.
+
+    Buffers the last n (state, action, reward) transitions, then computes
+    the n-step return as the bootstrap target:
+        G_t = r_t + γr_{t+1} + ... + γ^{n-1}r_{t+n-1} + γ^n Q(s_{t+n}, a_{t+n})
+
+    Fully on-policy: the bootstrap action a_{t+n} is the one actually taken
+    by the current policy (cached for consistency, same as DeepSARSA).
+    Adam handles per-parameter learning rates — no manual SGD needed.
+    """
+
+    def __init__(
+        self,
+        sample_state,
+        num_actions,
+        learning_rate: float,
+        discount_factor: float,
+        exploration_rate: float,
+        exploration_decay: float,
+        n_steps: int = 10,
+        target_update_frequency: int = 0,
+        convolutional: bool = False,
+        optimistic_init: float = 0.0,
+        weight_decay: float = 0.0,
+    ):
+        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        if convolutional:
+            self._net = ConvSARSANet(output_dim=num_actions, optimistic_init=optimistic_init).to(self._device)
+            self._state_shape = sample_state.shape[1:]
+        else:
+            if isinstance(sample_state, tuple):
+                sample_state = np.array(sample_state)
+            input_dim = len(sample_state.flatten())
+            self._net = FFSARSANet(input_dim=input_dim, output_dim=num_actions, optimistic_init=optimistic_init).to(self._device)
+            self._state_shape = (input_dim,)
+
+        self._use_target = target_update_frequency > 0
+        if self._use_target:
+            if convolutional:
+                self._target_net = ConvSARSANet(output_dim=num_actions).to(self._device)
+            else:
+                self._target_net = FFSARSANet(input_dim=self._state_shape[0], output_dim=num_actions).to(self._device)
+            self._target_net.load_state_dict(self._net.state_dict())
+            self._target_net.eval()
+        else:
+            self._target_net = None
+
+        self._num_actions = num_actions
+        self._n_steps = n_steps
+        self._optimizer = optim.AdamW(self._net.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        self._discount_factor = discount_factor
+        self._exploration_rate = exploration_rate
+        self._exploration_decay = exploration_decay
+        self._target_update_frequency = target_update_frequency
+        self._step_count = 0
+
+        # Buffer: list of (state, action, reward)
+        self._buffer = []
+
+        # Cache for on-policy action consistency
+        self._cached_next_action = None
+
+        super().__init__()
+
+    def _state_tensor(self, state):
+        if isinstance(state, tuple):
+            state = np.array(state)
+        shape = (1,) + self._state_shape
+        return torch.FloatTensor(state.reshape(shape)).to(self._device)
+
+    def _sample_epsilon_greedy(self, state):
+        if np.random.rand() < self._exploration_rate:
+            return np.random.choice(self._num_actions)
+        return self.select_greedy_action(state)
+
+    def select_action(self, state):
+        if self._cached_next_action is not None:
+            action = self._cached_next_action
+            self._cached_next_action = None
+            return action
+        return self._sample_epsilon_greedy(state)
+
+    def select_greedy_action(self, state):
+        with torch.no_grad():
+            q = self._net(self._state_tensor(state))
+            return torch.argmax(q).item()
+
+    def get_qvals(self, state):
+        with torch.no_grad():
+            return self._net(self._state_tensor(state))
+
+    def _update(self, state_0, action_0, bootstrap_state, bootstrap_action, active, rewards):
+        """Compute n-step return and update from state_0, action_0."""
+        # Compute discounted return over buffered rewards
+        G = 0.0
+        for i, r in enumerate(rewards):
+            G += (self._discount_factor ** i) * r
+
+        # Add bootstrap value if episode is still active
+        with torch.no_grad():
+            if active and bootstrap_action is not None:
+                bootstrap_net = self._target_net if self._use_target else self._net
+                next_q = bootstrap_net(self._state_tensor(bootstrap_state))[0, bootstrap_action]
+                G += (self._discount_factor ** len(rewards)) * next_q.item()
+
+        target = torch.tensor(G, dtype=torch.float32, device=self._device)
+        q_values = self._net(self._state_tensor(state_0))
+        q_sa = q_values[0, action_0]
+        loss = F.mse_loss(q_sa, target)
+
+        self._optimizer.zero_grad()
+        loss.backward()
+        self._optimizer.step()
+
+        self._step_count += 1
+        if self._use_target and self._step_count % self._target_update_frequency == 0:
+            self._target_net.load_state_dict(self._net.state_dict())
+
+        return loss.item()
+
+    def step(
+        self,
+        state,
+        action: int,
+        reward: float,
+        new_state,
+        active: bool,
+    ):
+        # Select and cache next action
+        if active:
+            next_action = self._sample_epsilon_greedy(new_state)
+            self._cached_next_action = next_action
+        else:
+            next_action = None
+            self._cached_next_action = None
+
+        self._buffer.append((state, action, reward))
+
+        loss = np.nan
+        if len(self._buffer) >= self._n_steps:
+            # Update from the oldest transition in the buffer
+            state_0, action_0, _ = self._buffer[0]
+            rewards = [t[2] for t in self._buffer]
+            loss = self._update(state_0, action_0, new_state, next_action, active, rewards)
+            self._buffer.pop(0)
+
+        # At episode end, flush remaining buffer transitions
+        if not active:
+            for i in range(len(self._buffer)):
+                state_0, action_0, _ = self._buffer[i]
+                rewards = [t[2] for t in self._buffer[i:]]
+                self._update(state_0, action_0, new_state, None, False, rewards)
+            self._buffer = []
+
+        return {"loss": loss}
+
+    def decay_epsilon(self):
+        self._exploration_rate = max(
+            self._exploration_rate * self._exploration_decay, 0.01
+        )
+
+    def save_model(self, path, episode):
+        save_path = os.path.join(path, f"deep_sarsa_n_model_{episode}.pth")
+        torch.save(
+            {
+                "model_state_dict": self._net.state_dict(),
+                "optimizer_state_dict": self._optimizer.state_dict(),
                 "step_count": self._step_count,
             },
             save_path,

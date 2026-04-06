@@ -4,15 +4,10 @@ import subprocess
 import time
 import numpy as np
 
-# Sweep parameters
-lrs = [0.0001, 0.0003, 0.001]
-lambdas = [0.5, 0.8, 0.9]
-timeouts = [2000, 5000]
-starts = [
-    {"label": "random",  "map_yaml": "meister_trimmed.yaml"},
-    {"label": "fixed",   "map_yaml": "test_meister_trimmed.yaml"},
-    {"label": "shaped",  "map_yaml": "shaped_meister_trimmed.yaml"},
-]
+# Sweep parameters — focused on shaped meister_trimmed only
+lrs = [0.00003, 0.0001, 0.0003]
+lambdas = [0.8, 0.9, 0.95]
+timeouts = [2000]
 
 # Fixed
 eps_decay = 0.99999
@@ -23,6 +18,7 @@ gamma = 0.99
 test_freq = 100
 viz_freq = 2000
 save_freq = 500
+stats_save_freq = 500
 
 PROJECT_DIR = "/mnt/home/slee1/state-abstraction-capacity"
 VENV = "/mnt/home/slee1/venvs/sac/bin/activate"
@@ -34,70 +30,20 @@ sweep_dir = os.path.join(BASE_RESULTS, timestamp)
 os.makedirs(sweep_dir, exist_ok=True)
 
 job_script_template = """#!/bin/bash
-#SBATCH -p genx
+#SBATCH -p gpu
 #SBATCH --nodes 1
 #SBATCH --cpus-per-task 4
 #SBATCH --mem 8G
+#SBATCH --gres=gpu:1
 #SBATCH --time=1-00:00:00
 """
 
 sweep_config = {}
 idx = 0
 
-for start, lr, lam, timeout in itertools.product(starts[:2], lrs, lambdas, timeouts):
-    config = {
-        "start": start["label"],
-        "map_yaml": start["map_yaml"],
-        "lr": lr,
-        "lambda_": lam,
-        "timeout": timeout,
-        "eps_decay": eps_decay,
-        "optimistic_init": opt,
-        "num_ep": num_ep,
-    }
-    sweep_config[idx] = config
-
-    job_dir = os.path.join(sweep_dir, f"job_{idx}")
-    os.makedirs(job_dir, exist_ok=True)
-
-    job_path = os.path.join(job_dir, f"job_{idx}.sh")
-    with open(job_path, "w") as f:
-        f.write(job_script_template)
-        f.write(f"#SBATCH --job-name=sarsa_{start['label']}_lr{lr}_lam{lam}_t{timeout}\n")
-        f.write(f"#SBATCH --output={job_dir}/output.txt\n")
-        f.write(f"#SBATCH --error={job_dir}/error.txt\n")
-        f.write(f"source {VENV}\n")
-        f.write(f"cd {PROJECT_DIR}\n")
-        f.write(
-            f"python -m sac.run"
-            f" -m deep_sarsa_lambda"
-            f" -conv"
-            f" -abs_results {job_dir}"
-            f" -map_yaml {start['map_yaml']}"
-            f" -test_map_yaml test_meister_trimmed.yaml"
-            f" -lr {lr}"
-            f" -lam {lam}"
-            f" -timeout {timeout}"
-            f" -eps {eps}"
-            f" -eps_decay {eps_decay}"
-            f" -gamma {gamma}"
-            f" -opt {opt}"
-            f" -num_ep {num_ep}"
-            f" -test {test_freq}"
-            f" -viz {viz_freq}"
-            f" -save {save_freq}"
-            f" -es 5000\n"
-        )
-
-    os.chmod(job_path, 0o755)
-    subprocess.call(f"sbatch {job_path}", shell=True)
-    idx += 1
-
 for lr, lam, timeout in itertools.product(lrs, lambdas, timeouts):
-    start = starts[2]  # shaped, fixed start only
     config = {
-        "start": start["label"],
-        "map_yaml": start["map_yaml"],
+        "map_yaml": "shaped_meister_trimmed.yaml",
         "lr": lr,
         "lambda_": lam,
         "timeout": timeout,
@@ -113,7 +59,7 @@ for lr, lam, timeout in itertools.product(lrs, lambdas, timeouts):
     job_path = os.path.join(job_dir, f"job_{idx}.sh")
     with open(job_path, "w") as f:
         f.write(job_script_template)
-        f.write(f"#SBATCH --job-name=sarsa_{start['label']}_lr{lr}_lam{lam}_t{timeout}\n")
+        f.write(f"#SBATCH --job-name=shaped_lr{lr}_lam{lam}_t{timeout}\n")
         f.write(f"#SBATCH --output={job_dir}/output.txt\n")
         f.write(f"#SBATCH --error={job_dir}/error.txt\n")
         f.write(f"source {VENV}\n")
@@ -123,7 +69,7 @@ for lr, lam, timeout in itertools.product(lrs, lambdas, timeouts):
             f" -m deep_sarsa_lambda"
             f" -conv"
             f" -abs_results {job_dir}"
-            f" -map_yaml {start['map_yaml']}"
+            f" -map_yaml shaped_meister_trimmed.yaml"
             f" -test_map_yaml test_meister_trimmed.yaml"
             f" -lr {lr}"
             f" -lam {lam}"
@@ -136,6 +82,7 @@ for lr, lam, timeout in itertools.product(lrs, lambdas, timeouts):
             f" -test {test_freq}"
             f" -viz {viz_freq}"
             f" -save {save_freq}"
+            f" -save_stats {stats_save_freq}"
             f" -es 5000\n"
         )
 
