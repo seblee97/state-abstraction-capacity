@@ -5,9 +5,9 @@ import time
 import numpy as np
 
 # Sweep parameters
-lrs = [0.00003, 0.00007, 0.0001, 0.0003]
-eps_decays = [0.9997, 0.9995, 0.999]
-target_update_freqs = [200, 500]
+lrs = [0.00003, 0.0001, 0.0003]
+eps_decays = [0.9997, 0.9995]
+n_steps_list = [5, 10, 20]
 
 # Fixed
 timeout = 2000
@@ -40,13 +40,13 @@ job_script_template = """#!/bin/bash
 sweep_config = {}
 idx = 0
 
-for lr, eps_decay, tuf in itertools.product(lrs, eps_decays, target_update_freqs):
+for lr, eps_decay, ns in itertools.product(lrs, eps_decays, n_steps_list):
     config = {
         "map_yaml": "shaped_meister_trimmed.yaml",
         "lr": lr,
         "timeout": timeout,
         "eps_decay": eps_decay,
-        "target_update_frequency": tuf,
+        "n_steps": ns,
         "optimistic_init": opt,
         "num_ep": num_ep,
         "invisible_rewards": True,
@@ -59,21 +59,21 @@ for lr, eps_decay, tuf in itertools.product(lrs, eps_decays, target_update_freqs
     job_path = os.path.join(job_dir, f"job_{idx}.sh")
     with open(job_path, "w") as f:
         f.write(job_script_template)
-        f.write(f"#SBATCH --job-name=adam_lr{lr}_ed{eps_decay}_tuf{tuf}\n")
+        f.write(f"#SBATCH --job-name=nsarsa_lr{lr}_ed{eps_decay}_ns{ns}\n")
         f.write(f"#SBATCH --output={job_dir}/output.txt\n")
         f.write(f"#SBATCH --error={job_dir}/error.txt\n")
         f.write(f"source {VENV}\n")
         f.write(f"cd {PROJECT_DIR}\n")
         f.write(
             f"python -m sac.run"
-            f" -m deep_sarsa"
+            f" -m deep_sarsa_n"
             f" -conv"
             f" -invis"
             f" -abs_results {job_dir}"
             f" -map_yaml shaped_meister_trimmed.yaml"
             f" -test_map_yaml test_meister_trimmed.yaml"
             f" -lr {lr}"
-            f" -tuf {tuf}"
+            f" -ns {ns}"
             f" -timeout {timeout}"
             f" -eps {eps}"
             f" -eps_decay {eps_decay}"

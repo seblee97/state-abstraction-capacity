@@ -51,6 +51,7 @@ parser.add_argument(
         "qrdqn",
         "deep_sarsa",
         "deep_sarsa_lambda",
+        "deep_sarsa_n",
     ],
     help="Model to use for training.",
 )
@@ -125,6 +126,13 @@ parser.add_argument(
     type=int,
     default=50,
     help="Frequency of updating the target network (for DQN).",
+)
+parser.add_argument(
+    "-ns",
+    "--n_steps",
+    type=int,
+    default=10,
+    help="Number of steps for n-step SARSA return.",
 )
 parser.add_argument(
     "-rbs",
@@ -559,6 +567,22 @@ def setup_model(model_type: str, env):
             convolutional=args.convolutional,
             optimistic_init=args.optimistic_init,
         )
+    elif model_type == "deep_sarsa_n":
+        sample_state = env.reset_environment()
+        num_actions = len(action_space)
+        return deep_sarsa.DeepSARSAN(
+            sample_state=sample_state,
+            num_actions=num_actions,
+            learning_rate=args.learning_rate,
+            discount_factor=args.discount_factor,
+            exploration_rate=args.exploration_rate,
+            exploration_decay=args.exploration_decay,
+            n_steps=args.n_steps,
+            target_update_frequency=args.target_update_frequency,
+            convolutional=args.convolutional,
+            optimistic_init=args.optimistic_init,
+            weight_decay=args.weight_decay,
+        )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -625,6 +649,7 @@ if __name__ == "__main__":
         "qrdqn",
         "deep_sarsa",
         "deep_sarsa_lambda",
+        "deep_sarsa_n",
     ]:
         episodic_trainer.train(
             model=model,
