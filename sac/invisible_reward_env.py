@@ -26,35 +26,36 @@ class InvisibleRewardEnv(wrapper.Wrapper):
 
     def get_state_representation(self, tuple_state=None):
         state = self._env.get_state_representation(tuple_state=tuple_state)
-
         if isinstance(state, np.ndarray):
             state = self._blank_reward_pixels(state)
-
         return state
 
+    def reset_environment(self, train: bool = True, map_yaml_path=None):
+        state = self._env.reset_environment(train=train, map_yaml_path=map_yaml_path)
+        if isinstance(state, np.ndarray):
+            state = self._blank_reward_pixels(state)
+        return state
+
+    def step(self, action):
+        reward, state = self._env.step(action)
+        if isinstance(state, np.ndarray):
+            state = self._blank_reward_pixels(state)
+        return reward, state
+
     def _blank_reward_pixels(self, state: np.ndarray) -> np.ndarray:
-        """Zero out reward pixels in the pixel observation.
+        """Replace reward pixels with free-cell colour in the processed observation.
 
-        The pixel pipeline is: RGB (H x W x 3) -> grayscale (H x W x 1)
-        -> transpose (1 x H x W) -> batch (1 x 1 x H x W).
-        By the time we see the state it is already fully processed.
-
-        We identify reward pixels by their grayscale value: red [1,0,0]
-        grayscales to 0.2126 (standard luminance). We replace those pixels
-        with the free-cell grayscale value of 1.0.
+        State shape after full pipeline: (1, 1, H, W) — batch x channel x H x W.
+        Red [1,0,0] grayscales to 0.299 under BT.601 (0.299R + 0.587G + 0.114B).
+        Free cells are white [1,1,1] -> grayscale 1.0.
         """
+        RED_GRAY = 0.299
+        FREE_GRAY = 1.0
+
         state = state.copy()
-
-        # State shape after full pipeline: (batch, C, H, W) = (1, 1, H, W)
-        # Remove batch dim to work with (1, H, W), then restore
-        img = state[0]  # (1, H, W)
-
-        RED_GRAY = 0.2126  # grayscale of [1, 0, 0] under standard luminance
-        FREE_GRAY = 1.0    # grayscale of [1, 1, 1]
-
+        img = state[0, 0]  # (H, W)
         for (y, x) in self._invisible_yx:
-            if img[0, y, x] == RED_GRAY:
-                img[0, y, x] = FREE_GRAY
-
-        state[0] = img
+            if abs(img[y, x] - RED_GRAY) < 1e-3:
+                img[y, x] = FREE_GRAY
+        state[0, 0] = img
         return state
