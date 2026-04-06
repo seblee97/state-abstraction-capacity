@@ -5,12 +5,12 @@ import time
 import numpy as np
 
 # Sweep parameters
-lrs = [0.00003, 0.0001, 0.0003]
-lambdas = [0.8, 0.9, 0.95]
+lrs = [0.00003, 0.00007, 0.0001]
+lambdas = [0.9, 0.95]
+eps_decays = [0.9997, 0.9995]
 
 # Fixed
 timeout = 2000
-eps_decay = 0.99999
 opt = 1.0
 num_ep = 20000
 eps = 1.0
@@ -41,7 +41,7 @@ job_script_template = """#!/bin/bash
 sweep_config = {}
 idx = 0
 
-for lr, lam in itertools.product(lrs, lambdas):
+for lr, lam, eps_decay in itertools.product(lrs, lambdas, eps_decays):
     config = {
         "map_yaml": "shaped_meister_trimmed.yaml",
         "lr": lr,
@@ -60,7 +60,7 @@ for lr, lam in itertools.product(lrs, lambdas):
     job_path = os.path.join(job_dir, f"job_{idx}.sh")
     with open(job_path, "w") as f:
         f.write(job_script_template)
-        f.write(f"#SBATCH --job-name=invis_lr{lr}_lam{lam}\n")
+        f.write(f"#SBATCH --job-name=invis_lr{lr}_lam{lam}_ed{eps_decay}\n")
         f.write(f"#SBATCH --output={job_dir}/output.txt\n")
         f.write(f"#SBATCH --error={job_dir}/error.txt\n")
         f.write(f"source {VENV}\n")
@@ -85,7 +85,7 @@ for lr, lam in itertools.product(lrs, lambdas):
             f" -viz {viz_freq}"
             f" -save {save_freq}"
             f" -save_stats {stats_save_freq}"
-            f" -es 5000\n"
+            f" -es 10000\n"
         )
 
     os.chmod(job_path, 0o755)
