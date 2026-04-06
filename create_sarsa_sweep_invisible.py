@@ -30,11 +30,10 @@ sweep_dir = os.path.join(BASE_RESULTS, timestamp)
 os.makedirs(sweep_dir, exist_ok=True)
 
 job_script_template = """#!/bin/bash
-#SBATCH -p gpu
+#SBATCH -p ccn
 #SBATCH --nodes 1
 #SBATCH --cpus-per-task 4
 #SBATCH --mem 8G
-#SBATCH --gres=gpu:1
 #SBATCH --time=1-00:00:00
 """
 
