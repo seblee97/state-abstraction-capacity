@@ -8,7 +8,7 @@ import numpy as np
 lrs = [0.00003, 0.0001, 0.0003]
 eps_decays = [0.9999, 0.9997]
 n_steps_list = [5, 20]
-shaping_scales = [0.1, 1.0]
+shaping_scales = [0.0001, 0.001]
 
 # Fixed
 timeout = 5000
